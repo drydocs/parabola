@@ -22,6 +22,7 @@ This document is the single source of truth for contributing. Please read it in 
 - [Code Standards](#code-standards)
 - [Pull Request Process](#pull-request-process)
 - [Running Checks Locally](#running-checks-locally)
+- [Releasing](#releasing)
 - [Getting Help](#getting-help)
 
 ---
@@ -324,6 +325,19 @@ pnpm smoke            # real end-to-end transfer against live testnet (needs fun
 # Run a single test file
 pnpm vitest run tests/encoding.test.ts
 ```
+
+---
+
+## Releasing
+
+Releases are maintainer-only and tag-triggered -- contributors don't need to do anything here.
+
+1. On `main`, bump `version` in `package.json` (semver) and move the relevant `[Unreleased]` entries in `CHANGELOG.md` under a new `## [X.Y.Z] - YYYY-MM-DD` heading.
+2. Commit that as `chore(release): vX.Y.Z`, push, and confirm CI is green.
+3. Tag it and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+4. `.github/workflows/publish.yml` picks up the tag, re-runs typecheck/test/build, confirms the tag version matches `package.json`, and publishes `@drydocs/parabola` to npm with provenance.
+
+Publishing requires an `NPM_TOKEN` repo secret (an npm automation token with publish rights on `@drydocs/parabola`) -- that's a one-time setup step in the repo's GitHub Settings > Secrets, done by whoever holds the npm org access, not something CI or a contributor can provision.
 
 ---
 

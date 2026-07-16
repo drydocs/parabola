@@ -1,6 +1,9 @@
 {
-  "name": "parabola",
+  "name": "@drydocs/parabola",
   "version": "0.1.0",
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "TypeScript SDK for moving native USDC between Circle's Arc network and Stellar via CCTP V2",
   "type": "module",
   "repository": {

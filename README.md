@@ -5,7 +5,7 @@ Parabola is a TypeScript SDK for moving native USDC between Circle's Arc network
 ## Installation
 
 ```bash
-npm install parabola
+npm install @drydocs/parabola
 ```
 
 ## Arc to Stellar
@@ -14,7 +14,7 @@ npm install parabola
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Keypair } from "@stellar/stellar-sdk";
-import { transfer, arcTestnetChain, type ArcSigner, type StellarSigner } from "parabola";
+import { transfer, arcTestnetChain, type ArcSigner, type StellarSigner } from "@drydocs/parabola";
 
 const arcAccount = privateKeyToAccount(process.env.ARC_PRIVATE_KEY as `0x${string}`);
 const arcSigner: ArcSigner = {
@@ -64,7 +64,7 @@ See [`examples/arc-to-stellar.ts`](examples/arc-to-stellar.ts) for the full work
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { Keypair } from "@stellar/stellar-sdk";
-import { transfer, arcTestnetChain, type ArcSigner, type StellarSigner } from "parabola";
+import { transfer, arcTestnetChain, type ArcSigner, type StellarSigner } from "@drydocs/parabola";
 
 const stellarKeypair = Keypair.fromSecret(process.env.STELLAR_SECRET_KEY!);
 const stellarSigner: StellarSigner = {
@@ -99,7 +99,7 @@ See [`examples/stellar-to-arc.ts`](examples/stellar-to-arc.ts) for the full work
 ## Fee estimation
 
 ```typescript
-import { estimateFee } from "parabola";
+import { estimateFee } from "@drydocs/parabola";
 
 const estimate = await estimateFee({
   from: "arc",
@@ -133,7 +133,7 @@ Along the way, Parabola also:
 If you omit `destinationSigner` (for example, your backend only holds the source chain's key at call time), `transfer()` performs the burn and attestation polling and returns `status: "pending"` with `mintTxHash: ""`. Finish the transfer later, from wherever the destination key lives, with `completeMint()`:
 
 ```typescript
-import { completeMint } from "parabola";
+import { completeMint } from "@drydocs/parabola";
 
 const { mintTxHash, attestationHash } = await completeMint({
   from: "arc",
