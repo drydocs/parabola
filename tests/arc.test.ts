@@ -1,0 +1,143 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const waitForTransactionReceipt = vi.fn();
+
+vi.mock("viem", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("viem")>();
+  return {
+    ...actual,
+    createPublicClient: () => ({ waitForTransactionReceipt }),
+  };
+});
+
+const {
+  approveUsdcOnArc,
+  burnUsdcOnArc,
+  burnUsdcOnArcWithStellarForward,
+  receiveMessageOnArc,
+} = await import("../src/chains/arc.js");
+const { ARC_TESTNET } = await import("../src/constants.js");
+
+const FAKE_HASH = "0x" + "a".repeat(64);
+const ZERO_BYTES32 = `0x${"0".repeat(64)}`;
+
+function makeSigner() {
+  const writeContract = vi.fn().mockResolvedValue(FAKE_HASH);
+  const signer = {
+    walletClient: {
+      account: { address: "0x1111111111111111111111111111111111111111" },
+      writeContract,
+    },
+  } as any;
+  return { signer, writeContract };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  waitForTransactionReceipt.mockResolvedValue({ status: "success" });
+});
+
+describe("approveUsdcOnArc", () => {
+  it("calls approve on the USDC contract with the TokenMessengerV2 as spender", async () => {
+    const { signer, writeContract } = makeSigner();
+
+    const hash = await approveUsdcOnArc(signer, 10_000_000n);
+
+    expect(hash).toBe(FAKE_HASH);
+    expect(writeContract).toHaveBeenCalledTimes(1);
+    const call = writeContract.mock.calls[0]?.[0];
+    expect(call.address).toBe(ARC_TESTNET.usdc);
+    expect(call.functionName).toBe("approve");
+    expect(call.args).toEqual([ARC_TESTNET.tokenMessengerV2, 10_000_000n]);
+    expect(waitForTransactionReceipt).toHaveBeenCalledWith({ hash: FAKE_HASH });
+  });
+});
+
+describe("burnUsdcOnArc", () => {
+  it("calls depositForBurn on TokenMessengerV2 with an unrestricted destinationCaller", async () => {
+    const { signer, writeContract } = makeSigner();
+    const mintRecipient = `0x${"11".repeat(32)}` as const;
+
+    await burnUsdcOnArc({
+      amountRaw: 5_000_000n,
+      destinationDomain: 27,
+      mintRecipientBytes32: mintRecipient,
+      maxFeeRaw: 100n,
+      minFinalityThreshold: 2000,
+      signer,
+    });
+
+    const call = writeContract.mock.calls[0]?.[0];
+    expect(call.address).toBe(ARC_TESTNET.tokenMessengerV2);
+    expect(call.functionName).toBe("depositForBurn");
+    expect(call.args).toEqual([
+      5_000_000n,
+      27,
+      mintRecipient,
+      ARC_TESTNET.usdc,
+      ZERO_BYTES32,
+      100n,
+      2000,
+    ]);
+  });
+});
+
+describe("burnUsdcOnArcWithStellarForward", () => {
+  it("calls depositForBurnWithHook, appending hookData after minFinalityThreshold", async () => {
+    const { signer, writeContract } = makeSigner();
+    const mintRecipient = `0x${"22".repeat(32)}` as const;
+    const hookData = `0x${"33".repeat(10)}` as const;
+
+    await burnUsdcOnArcWithStellarForward({
+      amountRaw: 7_000_000n,
+      destinationDomain: 27,
+      mintRecipientBytes32: mintRecipient,
+      maxFeeRaw: 50n,
+      minFinalityThreshold: 1000,
+      hookData,
+      signer,
+    });
+
+    const call = writeContract.mock.calls[0]?.[0];
+    expect(call.address).toBe(ARC_TESTNET.tokenMessengerV2);
+    expect(call.functionName).toBe("depositForBurnWithHook");
+    expect(call.args).toEqual([
+      7_000_000n,
+      27,
+      mintRecipient,
+      ARC_TESTNET.usdc,
+      ZERO_BYTES32,
+      50n,
+      1000,
+      hookData,
+    ]);
+  });
+});
+
+describe("receiveMessageOnArc", () => {
+  it("calls receiveMessage on MessageTransmitterV2 with the message and attestation", async () => {
+    const { signer, writeContract } = makeSigner();
+    const message = `0x${"44".repeat(20)}` as const;
+    const attestation = `0x${"55".repeat(65)}` as const;
+
+    const hash = await receiveMessageOnArc({ message, attestation, signer });
+
+    expect(hash).toBe(FAKE_HASH);
+    const call = writeContract.mock.calls[0]?.[0];
+    expect(call.address).toBe(ARC_TESTNET.messageTransmitterV2);
+    expect(call.functionName).toBe("receiveMessage");
+    expect(call.args).toEqual([message, attestation]);
+  });
+});
+
+describe("signer validation", () => {
+  it("throws if the walletClient has no account attached", async () => {
+    const signer = {
+      walletClient: { account: undefined, writeContract: vi.fn() },
+    } as any;
+
+    await expect(approveUsdcOnArc(signer, 1n)).rejects.toThrow(
+      "ArcSigner's walletClient must have an account attached",
+    );
+  });
+});

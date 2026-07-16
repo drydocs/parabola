@@ -250,8 +250,8 @@ docs: document completeMint in the README
   - `kebab-case` for filenames
 - **No side effects at module load time.** RPC clients (`createPublicClient`, `rpc.Server`) must be instantiated inside functions, not at the top level of a module.
 - **Comments:** only comment on WHY, not what the code does. If the code needs a what-comment, rewrite the code instead.
-- **Contract addresses and domain IDs:** never add or change a value in `src/constants.ts` from memory or inference. Pull it from Circle's or Arc's published docs (linked in the README) and cite the source page in the PR description. A wrong address here sends real funds to the wrong place.
-- **Tests:** any change to `src/utils/encoding.ts`, `src/chains/*.ts`, or `src/transfer.ts` needs a corresponding test. Network and RPC calls are mocked in tests -- see the existing `vi.mock` patterns in `tests/` for the convention.
+- **Contract addresses and domain IDs:** never add or change a value in `src/constants.ts` from memory or inference. Pull it from Circle's or Arc's published docs (linked in the README) and cite the source page in the PR description. A wrong address here sends real funds to the wrong place. Any PR touching `src/constants.ts` runs `pnpm verify:addresses` in CI, which checks every address against live RPC (Arc `eth_getCode`, Stellar `getContractData`) to confirm something is actually deployed there -- this catches typos and stale addresses, but it's not a substitute for citing the source doc, since a live contract at the wrong address still passes.
+- **Tests:** any change to `src/utils/encoding.ts`, `src/chains/*.ts`, or `src/transfer.ts` needs a corresponding test. Network and RPC calls are mocked in unit tests -- see the existing `vi.mock` patterns in `tests/` for the convention. `pnpm verify:addresses` (`scripts/verify-contract-addresses.mjs`) is the one check that hits live testnet RPC directly; it needs no funded account since it's read-only.
 
 ---
 
@@ -299,9 +299,10 @@ Pull requests are reviewed within 72 hours of submission. You will receive one o
 ## Running Checks Locally
 
 ```bash
-pnpm typecheck   # tsc --noEmit
-pnpm test        # vitest
-pnpm build       # tsup, emits ESM + CJS + type declarations to dist/
+pnpm typecheck        # tsc --noEmit
+pnpm test             # vitest
+pnpm build            # tsup, emits ESM + CJS + type declarations to dist/
+pnpm verify:addresses # confirms src/constants.ts addresses are live on-chain (no funded account needed)
 
 # Run a single test file
 pnpm vitest run tests/encoding.test.ts
