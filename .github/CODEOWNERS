@@ -1,0 +1,4 @@
+# Contract addresses, domain IDs, and RPC/Iris endpoints baked into this SDK.
+# Any change here must be independently verified against Circle's and Arc's
+# published docs before merging, not trusted from the PR description alone.
+/src/constants.ts @collinsezedike

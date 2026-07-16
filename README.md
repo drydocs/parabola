@@ -172,3 +172,13 @@ pnpm build       # tsup, emits ESM + CJS + type declarations to dist/
 pnpm test        # vitest
 pnpm typecheck   # tsc --noEmit
 ```
+
+## Contributing
+
+Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow (issue templates, branch naming, commit convention, PR process), and the [Code of Conduct](CODE_OF_CONDUCT.md) that governs participation.
+
+For security vulnerabilities, see [SECURITY.md](SECURITY.md) rather than opening a public issue.
+
+## License
+
+[MIT](LICENSE)
