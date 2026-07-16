@@ -24,7 +24,7 @@ vi.mock("../src/iris/poll.js", () => ({
   pollForAttestation: (...args: unknown[]) => pollForAttestation(...args),
 }));
 
-const { transfer } = await import("../src/transfer.js");
+const { transfer, completeMint } = await import("../src/transfer.js");
 
 const arcSigner = { walletClient: {} } as any;
 const stellarSigner = { publicKey: "GABCD" } as any;
@@ -78,6 +78,28 @@ describe("transfer (Arc -> Stellar)", () => {
     expect(result.status).toBe("pending");
     expect(result.mintTxHash).toBe("");
     expect(mintAndForwardOnStellar).not.toHaveBeenCalled();
+  });
+
+  it("can be finished later via completeMint using the returned burnTxHash", async () => {
+    const pending = await transfer({
+      from: "arc",
+      to: "stellar",
+      amount: "10",
+      recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+      speed: "standard",
+      signer: arcSigner,
+    });
+
+    const completed = await completeMint({
+      from: "arc",
+      to: "stellar",
+      burnTxHash: pending.burnTxHash,
+      signer: stellarSigner,
+    });
+
+    expect(mintAndForwardOnStellar).toHaveBeenCalledTimes(1);
+    expect(completed.mintTxHash).toBe("stellarminthash");
+    expect(completed.attestationHash).toBe("0xattestation");
   });
 });
 

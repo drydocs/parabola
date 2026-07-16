@@ -37,8 +37,9 @@ export interface TransferOptions {
    * because completing a CCTP transfer requires paying gas natively on the
    * destination chain, which the source-chain signer cannot do. Omit this to
    * perform only the burn and attestation steps: the result comes back with
-   * status "pending" and an empty mintTxHash, and the developer completes the
-   * mint later (e.g. from a backend process holding the destination key).
+   * status "pending" and an empty mintTxHash. Call completeMint() with
+   * burnTxHash and a destination-chain signer to finish it later (e.g. from a
+   * backend process holding the destination key).
    */
   destinationSigner?: Signer;
 }
@@ -74,4 +75,23 @@ export interface FeeEstimate {
   protocolFee: string;
   estimatedDurationSeconds: number;
   transferMode: TransferMode;
+}
+
+export interface CompleteMintParams {
+  /** The destination chain of the original transfer (the "to" you passed to transfer()). */
+  to: ChainId;
+  /** The source chain of the original transfer (the "from" you passed to transfer()). */
+  from: ChainId;
+  /** The burnTxHash returned by the earlier pending transfer() call. */
+  burnTxHash: string;
+  /** Signer native to the destination chain, used to submit receiveMessage / mint_and_forward. */
+  signer: Signer;
+  pollInterval?: number;
+  pollTimeout?: number;
+  useSandbox?: boolean;
+}
+
+export interface CompleteMintResult {
+  mintTxHash: string;
+  attestationHash: string;
 }

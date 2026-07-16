@@ -4,6 +4,10 @@ import type {
   TransferMode,
   ArcSigner,
   StellarSigner,
+  ChainId,
+  Signer,
+  CompleteMintParams,
+  CompleteMintResult,
 } from "./types.js";
 import {
   ARC_DOMAIN,
@@ -81,7 +85,7 @@ export async function transfer(params: TransferParams): Promise<TransferResult> 
 
   if (options.destinationSigner && attestation.message && attestation.attestation) {
     mintTxHash = await mint({
-      params,
+      to: params.to,
       message: attestation.message as `0x${string}`,
       attestation: attestation.attestation as `0x${string}`,
       signer: options.destinationSigner,
@@ -147,15 +151,48 @@ async function burn(args: {
 }
 
 async function mint(args: {
-  params: TransferParams;
+  to: ChainId;
   message: `0x${string}`;
   attestation: `0x${string}`;
-  signer: ArcSigner | StellarSigner;
+  signer: Signer;
 }): Promise<string> {
-  const { params, message, attestation, signer } = args;
+  const { to, message, attestation, signer } = args;
 
-  if (params.to === "arc") {
+  if (to === "arc") {
     return receiveMessageOnArc({ message, attestation, signer: signer as ArcSigner });
   }
   return mintAndForwardOnStellar({ message, attestation, signer: signer as StellarSigner });
+}
+
+/**
+ * Completes a transfer that was left "pending" because transfer() was called
+ * without options.destinationSigner. Re-polls Iris for the burn's attestation
+ * (in case it wasn't available yet) and submits the destination-chain mint:
+ * receiveMessage on Arc, or mint_and_forward on Stellar's CctpForwarder.
+ */
+export async function completeMint(params: CompleteMintParams): Promise<CompleteMintResult> {
+  const useSandbox = params.useSandbox ?? true;
+  const pollInterval = params.pollInterval ?? DEFAULT_POLL_INTERVAL_MS;
+  const pollTimeout = params.pollTimeout ?? DEFAULT_POLL_TIMEOUT_MS;
+
+  const attestation = await pollForAttestation({
+    sourceDomain: domainFor(params.from),
+    transactionHash: params.burnTxHash,
+    useSandbox,
+    pollInterval,
+    pollTimeout,
+  });
+
+  if (!attestation.message || !attestation.attestation) {
+    throw new Error(`Iris returned no attestation for burn ${params.burnTxHash}`);
+  }
+
+  const mintTxHash = await mint({
+    to: params.to,
+    message: attestation.message as `0x${string}`,
+    attestation: attestation.attestation as `0x${string}`,
+    signer: params.signer,
+  });
+
+  return { mintTxHash, attestationHash: attestation.attestation };
 }

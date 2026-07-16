@@ -1,4 +1,4 @@
-export { transfer } from "./transfer.js";
+export { transfer, completeMint } from "./transfer.js";
 export { estimateFee } from "./estimate.js";
 export { arcTestnetChain } from "./chains/arc.js";
 export { ARC_TESTNET, STELLAR_TESTNET } from "./constants.js";
@@ -15,4 +15,6 @@ export type {
   TransferResult,
   EstimateFeeParams,
   FeeEstimate,
+  CompleteMintParams,
+  CompleteMintResult,
 } from "./types.js";

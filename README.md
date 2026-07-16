@@ -126,9 +126,22 @@ Along the way, Parabola also:
 - Converts between Stellar USDC's 7-decimal precision and Arc USDC's 6-decimal precision, so you always work in human-readable amounts like `"10.50"`.
 - Picks Standard or Fast transfer based on `speed`, quotes the Fast fee from Circle's fees endpoint first, and falls back to Standard automatically if the quoted fee exceeds `maxFee`.
 
-### Completing the mint: `destinationSigner`
+### Completing the mint: `destinationSigner` and `completeMint`
 
-`receiveMessage` and `mint_and_forward` are permissionless CCTP calls, but submitting them still costs gas natively on the destination chain, and Parabola never holds keys on your behalf. Pass `options.destinationSigner` with a signer for the *destination* chain to have Parabola submit that step automatically. If you omit it, `transfer()` performs the burn and attestation polling and returns `status: "pending"` with `mintTxHash: ""`; you (or a backend process holding the destination key) complete the mint afterward using the returned `attestationHash`.
+`receiveMessage` and `mint_and_forward` are permissionless CCTP calls, but submitting them still costs gas natively on the destination chain, and Parabola never holds keys on your behalf. Pass `options.destinationSigner` with a signer for the *destination* chain to have Parabola submit that step automatically as part of the single `transfer()` call.
+
+If you omit `destinationSigner` (for example, your backend only holds the source chain's key at call time), `transfer()` performs the burn and attestation polling and returns `status: "pending"` with `mintTxHash: ""`. Finish the transfer later, from wherever the destination key lives, with `completeMint()`:
+
+```typescript
+import { completeMint } from "parabola";
+
+const { mintTxHash, attestationHash } = await completeMint({
+  from: "arc",
+  to: "stellar",
+  burnTxHash: result.burnTxHash,
+  signer: destinationSigner, // a StellarSigner, since "to" is Stellar
+});
+```
 
 ## Environment variables
 
