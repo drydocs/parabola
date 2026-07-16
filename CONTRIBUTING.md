@@ -14,6 +14,7 @@ This document is the single source of truth for contributing. Please read it in 
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Project Structure](#project-structure)
+- [Testing Strategy](#testing-strategy)
 - [Opening Issues](#opening-issues)
 - [Security Vulnerabilities](#security-vulnerabilities)
 - [Branch Naming](#branch-naming)
@@ -136,9 +137,24 @@ parabola/
     types.ts              # all exported TypeScript types
   tests/                 # vitest, one file per module above
   examples/              # runnable testnet examples
+  scripts/               # address verification and testnet smoke test
 ```
 
 Changes to `src/constants.ts` affect every transfer path -- see [Code Standards](#code-standards) below before touching contract addresses or domain IDs.
+
+---
+
+## Testing Strategy
+
+Parabola uses three layers of testing, each catching a different class of bug:
+
+1. **Unit tests (`tests/`, run via `pnpm test`).** Every network and RPC call is mocked with `vi.mock`. These are fast, run in CI on every push, and are the right place to cover argument-encoding bugs and every error branch -- see the existing `vi.mock` patterns in `tests/arc.test.ts` and `tests/stellar.test.ts` for the convention. They cannot catch a wrong contract address, a wrong ABI, or a real-world RPC quirk, because nothing here talks to a real network.
+
+2. **Live address verification (`pnpm verify:addresses`, `scripts/verify-contract-addresses.mjs`).** Confirms every address in `src/constants.ts` has real, deployed code at that address on its claimed testnet -- Arc via `eth_getCode`, Stellar via `getContractData`. No funded account needed, since these are public reads. Runs in CI automatically on any PR that touches `src/constants.ts` (`.github/workflows/verify-contract-addresses.yml`). This catches typos and stale addresses; it cannot catch "right shape of address, wrong contract."
+
+3. **Testnet smoke test (`pnpm smoke`, `scripts/testnet-smoke.mjs`).** Runs a real `transfer()` end-to-end in both directions against live Arc and Stellar testnet: real `depositForBurn`, real Iris attestation polling, real `receiveMessage` / `mint_and_forward`. This is the only layer that would catch a bug in the actual burn-attest-mint flow, bundling regressions in `dist/` (it imports the built package, not `src/`), or a live API contract change from Circle. It needs funded testnet keys (see `.env.example`, fund via [faucet.circle.com](https://faucet.circle.com)) and takes anywhere from 20 seconds to several minutes per case, so it is **not** run automatically in CI -- run it manually before a release, or after changing anything in `src/transfer.ts`, `src/chains/`, or `src/iris/`.
+
+You do not need funded Arc or Stellar testnet accounts to work on the SDK day-to-day -- layers 1 and 2 cover most contributions. Layer 3 matters most for changes to the transfer/mint/burn flow itself.
 
 ---
 
@@ -303,6 +319,7 @@ pnpm typecheck        # tsc --noEmit
 pnpm test             # vitest
 pnpm build            # tsup, emits ESM + CJS + type declarations to dist/
 pnpm verify:addresses # confirms src/constants.ts addresses are live on-chain (no funded account needed)
+pnpm smoke            # real end-to-end transfer against live testnet (needs funded keys, see Testing Strategy)
 
 # Run a single test file
 pnpm vitest run tests/encoding.test.ts

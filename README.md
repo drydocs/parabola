@@ -168,10 +168,14 @@ Network configuration used internally:
 
 ```bash
 pnpm install
-pnpm build       # tsup, emits ESM + CJS + type declarations to dist/
-pnpm test        # vitest
-pnpm typecheck   # tsc --noEmit
+pnpm build            # tsup, emits ESM + CJS + type declarations to dist/
+pnpm test             # vitest (mocked, no network access)
+pnpm typecheck        # tsc --noEmit
+pnpm verify:addresses # confirms every address in src/constants.ts is live on-chain
+pnpm smoke            # real end-to-end transfer against live testnet (needs funded keys)
 ```
+
+See [CONTRIBUTING.md's Testing Strategy](CONTRIBUTING.md#testing-strategy) for what each of these actually catches.
 
 ## Contributing
 

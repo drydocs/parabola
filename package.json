@@ -27,14 +27,15 @@
   "engines": {
     "node": ">=18"
   },
-  "packageManager": "pnpm@11.8.0",
+  "packageManager": "pnpm@10.9.0",
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "verify:addresses": "node scripts/verify-contract-addresses.mjs"
+    "verify:addresses": "node scripts/verify-contract-addresses.mjs",
+    "smoke": "node scripts/testnet-smoke.mjs"
   },
   "keywords": [
     "usdc",
