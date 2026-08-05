@@ -165,6 +165,12 @@ Network configuration used internally:
 - **No key custody.** Parabola never holds or transmits private keys. Completing a transfer's mint step on the destination chain requires a signer native to that chain (see `destinationSigner` above); Parabola cannot complete it for you without one.
 - **Stellar recipients need a USDC trustline first.** USDC on Stellar is a classic Stellar asset under the hood; any account receiving it for the first time must submit its own `changeTrust` operation before `mint_and_forward` can pay out to it, same as any other Stellar USDC transfer. Parabola cannot establish this on a recipient's behalf -- it has no signing relationship with an arbitrary third-party recipient. If the recipient hasn't received USDC on Stellar before, they need to set up the trustline themselves first.
 
+## References
+
+- [circlefin/stellar-cctp](https://github.com/circlefin/stellar-cctp) -- Circle's official Stellar CCTP contract source and reference TypeScript client (`examples/stellar.ts`, `examples/stellar-utils.ts`). This is the canonical source for contract argument order and hook-data byte layout; check it first before touching `src/chains/stellar.ts` or `src/utils/encoding.ts`'s Stellar-side functions.
+- [CCTP developer docs](https://developers.circle.com/cctp) -- general CCTP V2 concepts, supported chains and domains, fees.
+- [Arc docs](https://docs.arc.io) -- Arc network config and contract addresses.
+
 ## Development
 
 ```bash
