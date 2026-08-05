@@ -22,3 +22,7 @@ Found by running `scripts/testnet-smoke.mjs` against live testnet for the first 
 - `deposit_for_burn`'s Stellar argument order was wrong -- `caller` must be the first argument, not the last. Confirmed against the deployed contract's real interface via `stellar contract info interface`, not docs.
 - `encodeStellarForwardHook`'s byte layout was wrong -- the hook version and strkey length both live inside the same 32-byte header (offsets 24-27 and 28-31), with the strkey starting immediately at offset 32. The previous implementation added a spurious extra 4-byte length field, misaligning everything after it.
 - `@stellar/stellar-sdk` bumped `^13.0.0` -> `^16.2.0`: the pinned version couldn't decode a transaction-result XDR variant the live testnet RPC returns (`Bad union switch: 4`), meaning `completeMint`/`transfer` could burn funds on the source chain and then fail to even report the outcome.
+
+### Changed
+
+- **Breaking:** minimum supported Node.js bumped `>=18` -> `>=20`. The `@stellar/stellar-sdk@16.2.0` upgrade pulled in a `@noble/ed25519` version that requires `globalThis.crypto`, which Node 18 doesn't expose by default (this surfaced as CI failures on the Node 18 matrix job, not a theoretical concern). Node 18 has also been EOL since April 2025.

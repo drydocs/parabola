@@ -71,7 +71,7 @@ If this is your first open-source contribution, start here:
 
 | Tool    | Required version                              | Check             |
 | ------- | --------------------------------------------- | ----------------- |
-| Node.js | `>=18`                                        | `node --version`  |
+| Node.js | `>=20`                                        | `node --version`  |
 | pnpm    | pinned via `packageManager` in `package.json` | `pnpm --version`  |
 
 If you have [Corepack](https://nodejs.org/api/corepack.html) enabled (`corepack enable`), the correct pnpm version is picked up automatically from `package.json`.
