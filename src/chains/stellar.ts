@@ -76,6 +76,30 @@ async function pollTransactionStatus(server: rpc.Server, hash: string): Promise<
 }
 
 /**
+ * Approves Stellar's TokenMessengerMinter to pull USDC from the signer via the
+ * SEP-41 token's transfer_from, mirroring the ERC20 approve step CCTP needs on
+ * EVM chains. Required before deposit_for_burn -- it fails with "not enough
+ * allowance to spend" otherwise.
+ */
+export async function approveUsdcOnStellar(
+  amountRaw: bigint,
+  signer: StellarSigner,
+): Promise<string> {
+  const server = getServer();
+  const latestLedger = await server.getLatestLedger();
+  const expirationLedger = latestLedger.sequence + 100_000;
+
+  const args = [
+    Address.fromString(signer.publicKey).toScVal(),
+    Address.fromString(STELLAR_TESTNET.tokenMessengerMinter).toScVal(),
+    nativeToScVal(amountRaw, { type: "i128" }),
+    nativeToScVal(expirationLedger, { type: "u32" }),
+  ];
+
+  return invokeContract(STELLAR_TESTNET.usdc, "approve", args, signer);
+}
+
+/**
  * Calls deposit_for_burn on Stellar's TokenMessengerMinter, burning USDC to be
  * minted on the destination CCTP domain.
  */
@@ -89,7 +113,13 @@ export async function burnUsdcOnStellar(params: {
 }): Promise<string> {
   const recipientBytes = Buffer.from(params.mintRecipientBytes32.slice(2), "hex");
 
+  // Argument order per the deployed contract's interface (stellar contract info
+  // interface): caller is first, not last -- deposit_for_burn(caller, amount,
+  // destination_domain, mint_recipient, burn_token, destination_caller, max_fee,
+  // min_finality_threshold). Do not reorder from memory; re-verify against the
+  // contract if this signature ever needs to change.
   const args = [
+    Address.fromString(params.signer.publicKey).toScVal(),
     nativeToScVal(params.amountRaw, { type: "i128" }),
     nativeToScVal(params.destinationDomain, { type: "u32" }),
     nativeToScVal(recipientBytes, { type: "bytes" }),
@@ -97,7 +127,6 @@ export async function burnUsdcOnStellar(params: {
     nativeToScVal(Buffer.alloc(32), { type: "bytes" }), // destinationCaller: unrestricted
     nativeToScVal(params.maxFeeRaw, { type: "i128" }),
     nativeToScVal(params.minFinalityThreshold, { type: "u32" }),
-    Address.fromString(params.signer.publicKey).toScVal(),
   ];
 
   return invokeContract(STELLAR_TESTNET.tokenMessengerMinter, "deposit_for_burn", args, params.signer);

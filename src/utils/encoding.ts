@@ -32,21 +32,20 @@ export function bytes32ToStellarAddress(bytes32: `0x${string}`): string {
 }
 
 /**
- * Encodes a Stellar strkey recipient into the CCTP depositForBurnWithHook payload format
- * used to route inbound Stellar transfers through CctpForwarder: a 32-byte header of
- * (28 bytes zero padding + uint32 version) followed by the uint32 length-prefixed UTF-8 strkey.
+ * Encodes a Stellar strkey recipient into the CCTP depositForBurnWithHook payload
+ * format CctpForwarder expects: a single 32-byte header (bytes 0-23 zero, bytes
+ * 24-27 hook version as uint32, bytes 28-31 strkey byte length as uint32) followed
+ * immediately by the UTF-8 strkey bytes at offset 32. There is no separate length
+ * field beyond the header -- the strkey starts right after byte 31. Verified
+ * against Circle's reference implementation; re-verify there before changing.
  */
 export function encodeStellarForwardHook(recipientStrkey: string): `0x${string}` {
-  const version = 1;
-  const strkeyBytes = Buffer.from(recipientStrkey, "utf8");
-
-  const header = Buffer.alloc(32);
-  header.writeUInt32BE(version, 28);
-
-  const lengthPrefix = Buffer.alloc(4);
-  lengthPrefix.writeUInt32BE(strkeyBytes.length, 0);
-
-  return toHex(Buffer.concat([header, lengthPrefix, strkeyBytes]));
+  const recipientBytes = Buffer.from(recipientStrkey, "utf8");
+  const hookData = Buffer.alloc(32 + recipientBytes.length);
+  hookData.writeUInt32BE(0, 24); // hook version = 0
+  hookData.writeUInt32BE(recipientBytes.length, 28); // strkey byte length
+  recipientBytes.copy(hookData, 32);
+  return toHex(hookData);
 }
 
 /**

@@ -44,11 +44,11 @@ describe("encodeStellarForwardHook", () => {
     const hook = encodeStellarForwardHook(recipient);
     const bytes = Buffer.from(hook.slice(2), "hex");
 
-    // 32-byte header + 4-byte length prefix + strkey utf8 bytes
-    expect(bytes.length).toBe(32 + 4 + recipient.length);
-    expect(bytes.readUInt32BE(28)).toBe(1); // version
-    expect(bytes.readUInt32BE(32)).toBe(recipient.length);
-    expect(bytes.subarray(36).toString("utf8")).toBe(recipient);
+    // 32-byte header (version at 24-27, strkey length at 28-31) + strkey utf8 bytes
+    expect(bytes.length).toBe(32 + recipient.length);
+    expect(bytes.readUInt32BE(24)).toBe(0); // version
+    expect(bytes.readUInt32BE(28)).toBe(recipient.length);
+    expect(bytes.subarray(32).toString("utf8")).toBe(recipient);
   });
 });
 

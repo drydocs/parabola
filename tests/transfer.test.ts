@@ -1,20 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
+const approveUsdcOnArc = vi.fn();
 const burnUsdcOnArc = vi.fn();
 const burnUsdcOnArcWithStellarForward = vi.fn();
 const receiveMessageOnArc = vi.fn();
+const approveUsdcOnStellar = vi.fn();
 const burnUsdcOnStellar = vi.fn();
 const mintAndForwardOnStellar = vi.fn();
 const fetchFastTransferFeeBps = vi.fn();
 const pollForAttestation = vi.fn();
 
 vi.mock("../src/chains/arc.js", () => ({
+  approveUsdcOnArc: (...args: unknown[]) => approveUsdcOnArc(...args),
   burnUsdcOnArc: (...args: unknown[]) => burnUsdcOnArc(...args),
   burnUsdcOnArcWithStellarForward: (...args: unknown[]) => burnUsdcOnArcWithStellarForward(...args),
   receiveMessageOnArc: (...args: unknown[]) => receiveMessageOnArc(...args),
 }));
 
 vi.mock("../src/chains/stellar.js", () => ({
+  approveUsdcOnStellar: (...args: unknown[]) => approveUsdcOnStellar(...args),
   burnUsdcOnStellar: (...args: unknown[]) => burnUsdcOnStellar(...args),
   mintAndForwardOnStellar: (...args: unknown[]) => mintAndForwardOnStellar(...args),
 }));
@@ -31,8 +35,10 @@ const stellarSigner = { publicKey: "GABCD" } as any;
 
 beforeEach(() => {
   vi.clearAllMocks();
+  approveUsdcOnArc.mockResolvedValue("0xapprovehash");
   burnUsdcOnArc.mockResolvedValue("0xburnhash");
   burnUsdcOnArcWithStellarForward.mockResolvedValue("0xburnhookhash");
+  approveUsdcOnStellar.mockResolvedValue("stellarapprovehash");
   burnUsdcOnStellar.mockResolvedValue("stellarburnhash");
   pollForAttestation.mockResolvedValue({
     message: "0xmessage",

@@ -163,6 +163,7 @@ Network configuration used internally:
 - **Testnet only.** Arc is currently in public testnet ahead of its 2026 mainnet launch, so Parabola only ships Arc testnet contract addresses. Mainnet support lands once Arc mainnet and its CCTP deployment are public.
 - **Stellar inbound transfers require `CctpForwarder`.** This is a protocol requirement, not a Parabola choice: Circle's CCTP does not support minting directly to a Stellar address, so every transfer landing on Stellar routes through `mint_and_forward`.
 - **No key custody.** Parabola never holds or transmits private keys. Completing a transfer's mint step on the destination chain requires a signer native to that chain (see `destinationSigner` above); Parabola cannot complete it for you without one.
+- **Stellar recipients need a USDC trustline first.** USDC on Stellar is a classic Stellar asset under the hood; any account receiving it for the first time must submit its own `changeTrust` operation before `mint_and_forward` can pay out to it, same as any other Stellar USDC transfer. Parabola cannot establish this on a recipient's behalf -- it has no signing relationship with an arbitrary third-party recipient. If the recipient hasn't received USDC on Stellar before, they need to set up the trustline themselves first.
 
 ## Development
 

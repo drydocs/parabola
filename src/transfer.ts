@@ -21,8 +21,8 @@ import {
 import { fetchFastTransferFeeBps, pollForAttestation } from "./iris/poll.js";
 import { toRawAmount, fromRawAmount, decimalsForChain } from "./utils/amount.js";
 import { parseUsdcAmount, stellarAddressToBytes32, evmAddressToBytes32, encodeStellarForwardHook } from "./utils/encoding.js";
-import { burnUsdcOnArc, burnUsdcOnArcWithStellarForward, receiveMessageOnArc } from "./chains/arc.js";
-import { burnUsdcOnStellar, mintAndForwardOnStellar } from "./chains/stellar.js";
+import { approveUsdcOnArc, burnUsdcOnArc, burnUsdcOnArcWithStellarForward, receiveMessageOnArc } from "./chains/arc.js";
+import { approveUsdcOnStellar, burnUsdcOnStellar, mintAndForwardOnStellar } from "./chains/stellar.js";
 
 const FAST_ESTIMATED_DURATION_SECONDS = 15;
 
@@ -114,6 +114,11 @@ async function burn(args: {
 
   if (params.from === "arc") {
     const signer = params.signer as ArcSigner;
+    // TokenMessengerV2 pulls USDC via transferFrom under the hood; it must be
+    // approved to spend at least amountRaw before depositForBurn(WithHook) will
+    // succeed. Approving the exact amount per call avoids leaving a standing
+    // allowance beyond what this transfer needs.
+    await approveUsdcOnArc(signer, amountRaw);
     if (params.to === "stellar") {
       const hookData = encodeStellarForwardHook(params.recipient);
       const mintRecipientBytes32 = stellarAddressToBytes32(STELLAR_TESTNET.cctpForwarder);
@@ -140,6 +145,9 @@ async function burn(args: {
 
   const signer = params.signer as StellarSigner;
   const mintRecipientBytes32 = evmAddressToBytes32(params.recipient as `0x${string}`);
+  // Stellar's SEP-41 USDC token requires the same approve-before-transfer_from
+  // pattern as ERC20 on Arc.
+  await approveUsdcOnStellar(amountRaw, signer);
   return burnUsdcOnStellar({
     amountRaw,
     destinationDomain: ARC_DOMAIN,
