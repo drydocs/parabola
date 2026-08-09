@@ -38,7 +38,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify:addresses": "node scripts/verify-contract-addresses.mjs",
-    "smoke": "node scripts/testnet-smoke.mjs"
+    "smoke": "node scripts/testnet-smoke.mjs",
+    "dev:demo": "pnpm --filter wallet-transfer-demo dev"
   },
   "keywords": [
     "usdc",
