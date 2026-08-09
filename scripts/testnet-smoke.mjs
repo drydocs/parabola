@@ -4,7 +4,7 @@
 // receiveMessage / mint_and_forward calls and waits on real Iris attestations.
 //
 // Requires funded testnet keys (see .env.example, fund via
-// https://faucet.circle.com) and a built package (`pnpm build` first) --
+// https://faucet.circle.com) and a built package (`pnpm build` first), since
 // this imports from dist/, not src/, so it also catches bundling regressions
 // that unit tests against src/ can't see.
 //

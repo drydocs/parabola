@@ -11,7 +11,7 @@ labels: enhancement
 
 ## Motivation
 
-<!-- What problem does this solve? Be specific -- not "this would be nice" but "X currently fails/is missing when Y". -->
+<!-- What problem does this solve? Be specific: not "this would be nice" but "X currently fails/is missing when Y". -->
 
 ## Proposed Solution
 

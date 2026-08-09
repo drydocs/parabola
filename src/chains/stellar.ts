@@ -78,8 +78,8 @@ async function pollTransactionStatus(server: rpc.Server, hash: string): Promise<
 /**
  * Approves Stellar's TokenMessengerMinter to pull USDC from the signer via the
  * SEP-41 token's transfer_from, mirroring the ERC20 approve step CCTP needs on
- * EVM chains. Required before deposit_for_burn -- it fails with "not enough
- * allowance to spend" otherwise.
+ * EVM chains. Required before deposit_for_burn, which otherwise fails with
+ * "not enough allowance to spend".
  */
 export async function approveUsdcOnStellar(
   amountRaw: bigint,
@@ -114,10 +114,10 @@ export async function burnUsdcOnStellar(params: {
   const recipientBytes = Buffer.from(params.mintRecipientBytes32.slice(2), "hex");
 
   // Argument order per the deployed contract's interface (stellar contract info
-  // interface): caller is first, not last -- deposit_for_burn(caller, amount,
-  // destination_domain, mint_recipient, burn_token, destination_caller, max_fee,
-  // min_finality_threshold). Do not reorder from memory; re-verify against the
-  // contract if this signature ever needs to change.
+  // interface): caller comes first, not last, as in deposit_for_burn(caller,
+  // amount, destination_domain, mint_recipient, burn_token, destination_caller,
+  // max_fee, min_finality_threshold). Do not reorder from memory; re-verify
+  // against the contract if this signature ever needs to change.
   const args = [
     Address.fromString(params.signer.publicKey).toScVal(),
     nativeToScVal(params.amountRaw, { type: "i128" }),

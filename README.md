@@ -1,6 +1,16 @@
 # Parabola
 
-Parabola is a TypeScript SDK for moving native USDC between Circle's Arc network and Stellar using CCTP V2. It exists because Stellar is the odd one out in Circle's CCTP ecosystem: inbound transfers must route through a `CctpForwarder` contract instead of minting directly, Stellar addresses use a different encoding than every other CCTP chain, and Stellar's USDC has different decimal precision than Arc's. Parabola handles all of that internally so a developer calls one `transfer()` function instead of hand-rolling the burn-attest-mint flow across two chains with different data models.
+Parabola is a developer platform for the Arc&harr;Stellar USDC corridor. Today that means an SDK;
+a local dev CLI, gas abstraction, and transfer observability are the direction it's headed as the
+corridor sees real usage. That's a lens on where this goes, not a committed timeline.
+
+The SDK is a TypeScript library for moving native USDC between Circle's Arc network and Stellar
+using CCTP V2. It exists because Stellar is the odd one out in Circle's CCTP ecosystem: inbound
+transfers must route through a `CctpForwarder` contract instead of minting directly, Stellar
+addresses use a different encoding than every other CCTP chain, and Stellar's USDC has different
+decimal precision than Arc's. Parabola handles all of that internally so a developer calls one
+`transfer()` function instead of hand-rolling the burn-attest-mint flow across two chains with
+different data models.
 
 ## Installation
 
@@ -163,13 +173,13 @@ Network configuration used internally:
 - **Testnet only.** Arc is currently in public testnet ahead of its 2026 mainnet launch, so Parabola only ships Arc testnet contract addresses. Mainnet support lands once Arc mainnet and its CCTP deployment are public.
 - **Stellar inbound transfers require `CctpForwarder`.** This is a protocol requirement, not a Parabola choice: Circle's CCTP does not support minting directly to a Stellar address, so every transfer landing on Stellar routes through `mint_and_forward`.
 - **No key custody.** Parabola never holds or transmits private keys. Completing a transfer's mint step on the destination chain requires a signer native to that chain (see `destinationSigner` above); Parabola cannot complete it for you without one.
-- **Stellar recipients need a USDC trustline first.** USDC on Stellar is a classic Stellar asset under the hood; any account receiving it for the first time must submit its own `changeTrust` operation before `mint_and_forward` can pay out to it, same as any other Stellar USDC transfer. Parabola cannot establish this on a recipient's behalf -- it has no signing relationship with an arbitrary third-party recipient. If the recipient hasn't received USDC on Stellar before, they need to set up the trustline themselves first.
+- **Stellar recipients need a USDC trustline first.** USDC on Stellar is a classic Stellar asset under the hood; any account receiving it for the first time must submit its own `changeTrust` operation before `mint_and_forward` can pay out to it, same as any other Stellar USDC transfer. Parabola cannot establish this on a recipient's behalf (it has no signing relationship with an arbitrary third-party recipient). If the recipient hasn't received USDC on Stellar before, they need to set up the trustline themselves first.
 
 ## References
 
-- [circlefin/stellar-cctp](https://github.com/circlefin/stellar-cctp) -- Circle's official Stellar CCTP contract source and reference TypeScript client (`examples/stellar.ts`, `examples/stellar-utils.ts`). This is the canonical source for contract argument order and hook-data byte layout; check it first before touching `src/chains/stellar.ts` or `src/utils/encoding.ts`'s Stellar-side functions.
-- [CCTP developer docs](https://developers.circle.com/cctp) -- general CCTP V2 concepts, supported chains and domains, fees.
-- [Arc docs](https://docs.arc.io) -- Arc network config and contract addresses.
+- [circlefin/stellar-cctp](https://github.com/circlefin/stellar-cctp): Circle's official Stellar CCTP contract source and reference TypeScript client (`examples/stellar.ts`, `examples/stellar-utils.ts`). This is the canonical source for contract argument order and hook-data byte layout; check it first before touching `src/chains/stellar.ts` or `src/utils/encoding.ts`'s Stellar-side functions.
+- [CCTP developer docs](https://developers.circle.com/cctp): general CCTP V2 concepts, supported chains and domains, fees.
+- [Arc docs](https://docs.arc.io): Arc network config and contract addresses.
 
 ## Development
 

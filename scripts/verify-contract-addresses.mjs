@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Confirms every contract/token address hardcoded in src/constants.ts is a real,
-// deployed contract on the network it claims to be on -- not a typo, not an EOA,
+// deployed contract on the network it claims to be on: not a typo, not an EOA,
 // not a stale address from a redeployment. Public reads only, no funded account
 // needed. See CONTRIBUTING.md's "Code Standards" section on src/constants.ts.
 

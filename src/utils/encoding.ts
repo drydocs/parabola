@@ -36,7 +36,7 @@ export function bytes32ToStellarAddress(bytes32: `0x${string}`): string {
  * format CctpForwarder expects: a single 32-byte header (bytes 0-23 zero, bytes
  * 24-27 hook version as uint32, bytes 28-31 strkey byte length as uint32) followed
  * immediately by the UTF-8 strkey bytes at offset 32. There is no separate length
- * field beyond the header -- the strkey starts right after byte 31. Verified
+ * field beyond the header: the strkey starts right after byte 31. Verified
  * against Circle's reference implementation; re-verify there before changing.
  */
 export function encodeStellarForwardHook(recipientStrkey: string): `0x${string}` {
