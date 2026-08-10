@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { ChainId, TransferSpeed } from "@drydocs/parabola";
 import type { useArcWallet } from "../hooks/useArcWallet.js";
 import type { useStellarWallet } from "../hooks/useStellarWallet.js";
@@ -41,8 +42,25 @@ export function TransferForm({ value, onChange, arcWallet, stellarWallet, onSubm
   const recipientErr = recipientError(value.to, value.recipient);
   const canSubmit = sourceReady && destinationReady && !recipientErr && Number(value.amount) > 0 && !submitting;
 
+  // Most demo transfers are to yourself, across your own two wallets -- default the
+  // recipient to the destination wallet's own address as soon as it connects, rather
+  // than making the user retype an address the app already has. Only fills an empty
+  // field, so it never clobbers a recipient someone typed in to pay out to a third party.
+  useEffect(() => {
+    if (destinationWallet.status === "connected" && destinationWallet.address && !value.recipient) {
+      onChange({ ...value, recipient: destinationWallet.address });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [destinationWallet.status, destinationWallet.address, value.to]);
+
   function flipDirection() {
     onChange({ ...value, from: value.to, to: value.from, recipient: "" });
+  }
+
+  function useConnectedAddress() {
+    if (destinationWallet.address) {
+      onChange({ ...value, recipient: destinationWallet.address });
+    }
   }
 
   return (
@@ -73,7 +91,14 @@ export function TransferForm({ value, onChange, arcWallet, stellarWallet, onSubm
       </label>
 
       <label>
-        Recipient ({value.to === "arc" ? "Arc address" : "Stellar address"})
+        <span className="label-row">
+          Recipient ({value.to === "arc" ? "Arc address" : "Stellar address"})
+          {destinationWallet.address && destinationWallet.address !== value.recipient && (
+            <button type="button" className="link-button" onClick={useConnectedAddress}>
+              Use connected address
+            </button>
+          )}
+        </span>
         <input
           type="text"
           placeholder={value.to === "arc" ? "0x..." : "G..."}
