@@ -27,6 +27,7 @@ export function App() {
     result,
     error,
     burnMayHaveSucceeded,
+    recoverableBurnTxHash,
     submit,
     finishPending,
     feeEstimate,
@@ -75,6 +76,21 @@ export function App() {
     await finishPending(params);
   }
 
+  async function handleRecoverMint() {
+    if (!recoverableBurnTxHash) return;
+    const destinationSigner = signerFor(form.to);
+    if (!destinationSigner) return;
+
+    const params: CompleteMintParams = {
+      from: form.from,
+      to: form.to,
+      burnTxHash: recoverableBurnTxHash,
+      signer: destinationSigner,
+    };
+
+    await finishPending(params);
+  }
+
   return (
     <div className="app">
       <header>
@@ -115,7 +131,15 @@ export function App() {
       </section>
 
       {error && (
-        <ErrorBanner message={error} burnMayHaveSucceeded={burnMayHaveSucceeded} onDismiss={reset} />
+        <ErrorBanner
+          message={error}
+          burnMayHaveSucceeded={burnMayHaveSucceeded}
+          recoverableBurnTxHash={recoverableBurnTxHash}
+          destinationWalletConnected={signerFor(form.to) !== null}
+          onRecover={handleRecoverMint}
+          recovering={status === "submitting"}
+          onDismiss={reset}
+        />
       )}
 
       {result && (

@@ -29,6 +29,7 @@ vi.mock("../src/iris/poll.js", () => ({
 }));
 
 const { transfer, completeMint } = await import("../src/transfer.js");
+const { TransferError } = await import("../src/errors.js");
 
 const arcSigner = { walletClient: {} } as any;
 const stellarSigner = { publicKey: "GABCD" } as any;
@@ -84,6 +85,49 @@ describe("transfer (Arc -> Stellar)", () => {
     expect(result.status).toBe("pending");
     expect(result.mintTxHash).toBe("");
     expect(mintAndForwardOnStellar).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a TransferError carrying burnTxHash when the mint step fails", async () => {
+    mintAndForwardOnStellar.mockRejectedValueOnce(new Error("Account not found: GABCD"));
+
+    await expect(
+      transfer({
+        from: "arc",
+        to: "stellar",
+        amount: "10",
+        recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+        speed: "standard",
+        signer: arcSigner,
+        options: { destinationSigner: stellarSigner },
+      }),
+    ).rejects.toMatchObject({
+      burnTxHash: "0xburnhookhash",
+      attestationHash: "0xattestation",
+      message: "Account not found: GABCD",
+    });
+  });
+
+  it("rethrows a TransferError carrying burnTxHash when attestation polling fails", async () => {
+    pollForAttestation.mockRejectedValueOnce(new Error("Timed out after 300000ms"));
+
+    let caught: unknown;
+    try {
+      await transfer({
+        from: "arc",
+        to: "stellar",
+        amount: "10",
+        recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+        speed: "standard",
+        signer: arcSigner,
+        options: { destinationSigner: stellarSigner },
+      });
+    } catch (err) {
+      caught = err;
+    }
+
+    expect(caught).toBeInstanceOf(TransferError);
+    expect((caught as InstanceType<typeof TransferError>).burnTxHash).toBe("0xburnhookhash");
+    expect((caught as InstanceType<typeof TransferError>).attestationHash).toBeUndefined();
   });
 
   it("can be finished later via completeMint using the returned burnTxHash", async () => {

@@ -178,6 +178,13 @@ button:disabled {
   width: fit-content;
 }
 
+.label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .field-error {
   color: var(--danger-fg);
   font-size: 0.8rem;
@@ -208,6 +215,17 @@ button:disabled {
   flex-direction: column;
   gap: 8px;
   font-size: 0.9rem;
+}
+
+.error-banner code {
+  font-size: 0.85em;
+  word-break: break-all;
+}
+
+.error-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 .transfer-status {

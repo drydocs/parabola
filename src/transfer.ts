@@ -19,6 +19,7 @@ import {
   DEFAULT_POLL_TIMEOUT_MS,
 } from "./constants.js";
 import { fetchFastTransferFeeBps, pollForAttestation } from "./iris/poll.js";
+import { TransferError } from "./errors.js";
 import { toRawAmount, fromRawAmount, decimalsForChain } from "./utils/amount.js";
 import { parseUsdcAmount, stellarAddressToBytes32, evmAddressToBytes32, encodeStellarForwardHook } from "./utils/encoding.js";
 import { approveUsdcOnArc, burnUsdcOnArc, burnUsdcOnArcWithStellarForward, receiveMessageOnArc } from "./chains/arc.js";
@@ -72,36 +73,47 @@ export async function transfer(params: TransferParams): Promise<TransferResult> 
     minFinalityThreshold,
   });
 
-  const attestation = await pollForAttestation({
-    sourceDomain: domainFor(params.from),
-    transactionHash: burnTxHash,
-    useSandbox,
-    pollInterval,
-    pollTimeout,
-  });
-
-  let mintTxHash = "";
-  let status: TransferResult["status"] = "pending";
-
-  if (options.destinationSigner && attestation.message && attestation.attestation) {
-    mintTxHash = await mint({
-      to: params.to,
-      message: attestation.message as `0x${string}`,
-      attestation: attestation.attestation as `0x${string}`,
-      signer: options.destinationSigner,
+  // Everything past this point runs after the source-chain burn has already happened.
+  // Any failure here (attestation timeout, a mint-step error) must not lose burnTxHash --
+  // the caller still needs it to recover via completeMint(), so it's rethrown attached to
+  // a TransferError rather than left to vanish with a bare Error.
+  let attestationHash: string | undefined;
+  try {
+    const attestation = await pollForAttestation({
+      sourceDomain: domainFor(params.from),
+      transactionHash: burnTxHash,
+      useSandbox,
+      pollInterval,
+      pollTimeout,
     });
-    status = "success";
-  }
+    attestationHash = attestation.attestation ?? undefined;
 
-  return {
-    status,
-    transferMode,
-    burnTxHash,
-    attestationHash: attestation.attestation ?? "",
-    mintTxHash,
-    fee: transferMode === "fast" ? fromRawAmount(feeRaw, params.from) : "0",
-    durationMs: Date.now() - start,
-  };
+    let mintTxHash = "";
+    let status: TransferResult["status"] = "pending";
+
+    if (options.destinationSigner && attestation.message && attestation.attestation) {
+      mintTxHash = await mint({
+        to: params.to,
+        message: attestation.message as `0x${string}`,
+        attestation: attestation.attestation as `0x${string}`,
+        signer: options.destinationSigner,
+      });
+      status = "success";
+    }
+
+    return {
+      status,
+      transferMode,
+      burnTxHash,
+      attestationHash: attestation.attestation ?? "",
+      mintTxHash,
+      fee: transferMode === "fast" ? fromRawAmount(feeRaw, params.from) : "0",
+      durationMs: Date.now() - start,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new TransferError(message, burnTxHash, attestationHash);
+  }
 }
 
 async function burn(args: {

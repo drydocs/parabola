@@ -3,6 +3,7 @@ import {
   transfer,
   estimateFee,
   completeMint,
+  TransferError,
   type TransferParams,
   type TransferResult,
   type EstimateFeeParams,
@@ -12,19 +13,15 @@ import {
 
 export type TransferUiStatus = "idle" | "submitting" | "success" | "pending" | "error";
 
-/**
- * transfer() throws entirely if Iris attestation polling times out. burnTxHash is never
- * returned to the caller in that case, even though the source-chain burn already happened.
- * There is no way to recover it from the thrown error. See src/iris/poll.ts's timeout message
- * and INTEGRATION.md's "Known rough edge" section.
- */
-const ATTESTATION_TIMEOUT_MARKER = "Timed out after";
-
 export function useTransfer() {
   const [status, setStatus] = useState<TransferUiStatus>("idle");
   const [result, setResult] = useState<TransferResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [burnMayHaveSucceeded, setBurnMayHaveSucceeded] = useState(false);
+  // Set whenever transfer() throws a TransferError -- burnTxHash is still recoverable via
+  // completeMint() even though the promise rejected, so the UI can offer that instead of
+  // just telling the user to go find the hash themselves on an explorer.
+  const [recoverableBurnTxHash, setRecoverableBurnTxHash] = useState<string | null>(null);
 
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
@@ -33,6 +30,7 @@ export function useTransfer() {
     setStatus("submitting");
     setError(null);
     setBurnMayHaveSucceeded(false);
+    setRecoverableBurnTxHash(null);
     try {
       const transferResult = await transfer(params);
       setResult(transferResult);
@@ -40,7 +38,10 @@ export function useTransfer() {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
-      setBurnMayHaveSucceeded(message.includes(ATTESTATION_TIMEOUT_MARKER));
+      if (err instanceof TransferError) {
+        setBurnMayHaveSucceeded(true);
+        setRecoverableBurnTxHash(err.burnTxHash);
+      }
       setStatus("error");
     }
   }, []);
@@ -53,13 +54,17 @@ export function useTransfer() {
       setResult((previous) =>
         previous
           ? { ...previous, status: "success", mintTxHash: completeResult.mintTxHash, attestationHash: completeResult.attestationHash }
-          : previous,
+          : { status: "success", transferMode: "standard", burnTxHash: params.burnTxHash, mintTxHash: completeResult.mintTxHash, attestationHash: completeResult.attestationHash, fee: "0", durationMs: 0 },
       );
+      setRecoverableBurnTxHash(null);
       setStatus("success");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
-      setBurnMayHaveSucceeded(message.includes(ATTESTATION_TIMEOUT_MARKER));
+      if (err instanceof TransferError) {
+        setBurnMayHaveSucceeded(true);
+        setRecoverableBurnTxHash(err.burnTxHash);
+      }
       setStatus("error");
     }
   }, []);
@@ -80,7 +85,20 @@ export function useTransfer() {
     setResult(null);
     setError(null);
     setBurnMayHaveSucceeded(false);
+    setRecoverableBurnTxHash(null);
   }, []);
 
-  return { status, result, error, burnMayHaveSucceeded, submit, finishPending, feeEstimate, estimating, estimate, reset };
+  return {
+    status,
+    result,
+    error,
+    burnMayHaveSucceeded,
+    recoverableBurnTxHash,
+    submit,
+    finishPending,
+    feeEstimate,
+    estimating,
+    estimate,
+    reset,
+  };
 }
