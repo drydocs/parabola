@@ -43,3 +43,19 @@ export async function connectStellarWallet(): Promise<{ signer: StellarSigner; a
 }
 
 export const stellarNetworkPassphrase = STELLAR_TESTNET.networkPassphrase;
+
+/**
+ * Freighter exposes no disconnect or account-change event, unlike MetaMask's
+ * accountsChanged -- the only way to notice the user revoked access or switched
+ * accounts from inside the extension is to re-check on demand. Called when the tab
+ * regains focus while a Stellar wallet is marked connected in this app's state.
+ */
+export async function stellarWalletStillConnected(expectedAddress: string): Promise<boolean> {
+  const connected = await isConnected();
+  if (connected.error || !connected.isConnected) return false;
+
+  const addressResult = await getAddress();
+  if (addressResult.error) return false;
+
+  return addressResult.address === expectedAddress;
+}
