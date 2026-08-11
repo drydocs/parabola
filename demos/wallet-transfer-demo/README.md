@@ -23,7 +23,7 @@ yet), which means the SDK must be built once before the demo can resolve real ty
 # from the repo root
 pnpm install
 pnpm build       # builds @drydocs/parabola's dist/, required before the demo will run
-pnpm dev:demo     # starts this app
+pnpm dev:wallet-transfer-demo     # starts this app
 ```
 
 Then open the printed local URL, connect both wallets, and try a transfer. Use small amounts:

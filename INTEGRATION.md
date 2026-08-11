@@ -83,7 +83,7 @@ don't let it evaporate in memory.
 ```bash
 pnpm install
 pnpm build      # builds @drydocs/parabola: required first, see demos/wallet-transfer-demo/README.md
-pnpm dev:demo
+pnpm dev:wallet-transfer-demo
 ```
 
 Prerequisites: MetaMask and Freighter browser extensions, and funded Arc + Stellar testnet
