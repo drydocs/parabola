@@ -26,8 +26,8 @@ export function App() {
     status,
     result,
     error,
-    burnMayHaveSucceeded,
     recoverableBurnTxHash,
+    submissionUncertain,
     submit,
     finishPending,
     feeEstimate,
@@ -133,8 +133,8 @@ export function App() {
       {error && (
         <ErrorBanner
           message={error}
-          burnMayHaveSucceeded={burnMayHaveSucceeded}
           recoverableBurnTxHash={recoverableBurnTxHash}
+          submissionUncertain={submissionUncertain}
           destinationWalletConnected={signerFor(form.to) !== null}
           onRecover={handleRecoverMint}
           recovering={status === "submitting"}

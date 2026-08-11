@@ -4,6 +4,7 @@ import {
   estimateFee,
   completeMint,
   TransferError,
+  SubmissionTimeoutError,
   type TransferParams,
   type TransferResult,
   type EstimateFeeParams,
@@ -17,11 +18,15 @@ export function useTransfer() {
   const [status, setStatus] = useState<TransferUiStatus>("idle");
   const [result, setResult] = useState<TransferResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [burnMayHaveSucceeded, setBurnMayHaveSucceeded] = useState(false);
-  // Set whenever transfer() throws a TransferError -- burnTxHash is still recoverable via
+  // Set whenever transfer() throws a TransferError: burnTxHash is still recoverable via
   // completeMint() even though the promise rejected, so the UI can offer that instead of
   // just telling the user to go find the hash themselves on an explorer.
   const [recoverableBurnTxHash, setRecoverableBurnTxHash] = useState<string | null>(null);
+  // Set for a SubmissionTimeoutError that isn't a TransferError, i.e. an approve step's
+  // confirmation timed out, not the burn itself. There's no burn hash to recover with here
+  // (the burn was never reached), but it's still wrong to claim nothing was submitted: this
+  // specific transaction was broadcast, its outcome is just unconfirmed.
+  const [submissionUncertain, setSubmissionUncertain] = useState(false);
 
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate | null>(null);
   const [estimating, setEstimating] = useState(false);
@@ -29,8 +34,8 @@ export function useTransfer() {
   const submit = useCallback(async (params: TransferParams) => {
     setStatus("submitting");
     setError(null);
-    setBurnMayHaveSucceeded(false);
     setRecoverableBurnTxHash(null);
+    setSubmissionUncertain(false);
     try {
       const transferResult = await transfer(params);
       setResult(transferResult);
@@ -39,8 +44,9 @@ export function useTransfer() {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       if (err instanceof TransferError) {
-        setBurnMayHaveSucceeded(true);
         setRecoverableBurnTxHash(err.burnTxHash);
+      } else if (err instanceof SubmissionTimeoutError) {
+        setSubmissionUncertain(true);
       }
       setStatus("error");
     }
@@ -62,8 +68,9 @@ export function useTransfer() {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       if (err instanceof TransferError) {
-        setBurnMayHaveSucceeded(true);
         setRecoverableBurnTxHash(err.burnTxHash);
+      } else if (err instanceof SubmissionTimeoutError) {
+        setSubmissionUncertain(true);
       }
       setStatus("error");
     }
@@ -84,16 +91,16 @@ export function useTransfer() {
     setStatus("idle");
     setResult(null);
     setError(null);
-    setBurnMayHaveSucceeded(false);
     setRecoverableBurnTxHash(null);
+    setSubmissionUncertain(false);
   }, []);
 
   return {
     status,
     result,
     error,
-    burnMayHaveSucceeded,
     recoverableBurnTxHash,
+    submissionUncertain,
     submit,
     finishPending,
     feeEstimate,

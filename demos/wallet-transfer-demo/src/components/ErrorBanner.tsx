@@ -1,7 +1,7 @@
 interface Props {
   message: string;
-  burnMayHaveSucceeded: boolean;
   recoverableBurnTxHash: string | null;
+  submissionUncertain: boolean;
   destinationWalletConnected: boolean;
   onRecover: () => void;
   recovering: boolean;
@@ -10,15 +10,17 @@ interface Props {
 
 /**
  * transfer() throwing does not mean nothing happened: the source-chain burn step can
- * succeed and then a later step (attestation polling, the mint call) can still fail).
- * transfer() rethrows those as a TransferError carrying burnTxHash (see src/errors.ts),
- * so this banner can offer to finish the mint directly instead of just pointing at an
- * explorer and asking the user to call completeMint() themselves.
+ * succeed and then a later step (attestation polling, the mint call) can still fail.
+ * transfer() rethrows those as a TransferError carrying burnTxHash (see src/errors.ts) --
+ * recoverableBurnTxHash reflects that. Separately, an approve step's own confirmation can
+ * time out before the burn is ever attempted (submissionUncertain): there's no burn hash
+ * to recover with, but that transaction was still genuinely broadcast, so this banner
+ * never claims "nothing happened" for that case either.
  */
 export function ErrorBanner({
   message,
-  burnMayHaveSucceeded,
   recoverableBurnTxHash,
+  submissionUncertain,
   destinationWalletConnected,
   onRecover,
   recovering,
@@ -35,12 +37,16 @@ export function ErrorBanner({
             ? "Finish it below rather than retrying the transfer from scratch."
             : "Connect the destination wallet, then finish it below rather than retrying the transfer from scratch."}
         </p>
-      ) : (
+      ) : submissionUncertain ? (
         <p>
-          {burnMayHaveSucceeded
-            ? "The source-chain burn very likely already succeeded before this failed, and the funds have left the source chain. Check your address on the source-chain explorer to find the burn transaction, then call completeMint() with that hash rather than retrying the transfer from scratch."
-            : "Your transfer may have already succeeded on the source chain even though this failed. Check the source-chain explorer for your address before retrying."}
+          A transaction was broadcast (likely the token approval) but its confirmation timed
+          out before the burn was attempted, so no funds have left the source chain. It may
+          still land on its own; check your address on the source-chain explorer if you want
+          to confirm before retrying, though retrying is low-risk here since approvals just
+          overwrite the allowance rather than accumulate.
         </p>
+      ) : (
+        <p>Nothing was submitted on-chain yet, so it's safe to retry.</p>
       )}
       <div className="error-banner-actions">
         {recoverableBurnTxHash && (

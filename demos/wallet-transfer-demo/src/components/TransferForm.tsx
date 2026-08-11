@@ -17,6 +17,9 @@ export interface TransferFormState {
 const ARC_RECIPIENT_PATTERN = /^0x[a-fA-F0-9]{40}$/;
 const STELLAR_RECIPIENT_PATTERN = /^[GC][A-Z2-7]{55}$/;
 
+const TOGGLE_INFO =
+  "When turned on, both wallets must be connected. When turned off, only the source wallet is needed. You must provide a recipient address, and manually finish the mint.";
+
 export function recipientError(to: ChainId, recipient: string): string | null {
   if (!recipient) return null;
   const pattern = to === "arc" ? ARC_RECIPIENT_PATTERN : STELLAR_RECIPIENT_PATTERN;
@@ -42,7 +45,7 @@ export function TransferForm({ value, onChange, arcWallet, stellarWallet, onSubm
   const recipientErr = recipientError(value.to, value.recipient);
   const canSubmit = sourceReady && destinationReady && !recipientErr && Number(value.amount) > 0 && !submitting;
 
-  // Most demo transfers are to yourself, across your own two wallets -- default the
+  // Most demo transfers are to yourself, across your own two wallets. Default the
   // recipient to the destination wallet's own address as soon as it connects, rather
   // than making the user retype an address the app already has. Only fills an empty
   // field, so it never clobbers a recipient someone typed in to pay out to a third party.
@@ -62,6 +65,7 @@ export function TransferForm({ value, onChange, arcWallet, stellarWallet, onSubm
       onChange({ ...value, recipient: destinationWallet.address });
     }
   }
+
 
   return (
     <form
@@ -91,24 +95,6 @@ export function TransferForm({ value, onChange, arcWallet, stellarWallet, onSubm
       </label>
 
       <label>
-        <span className="label-row">
-          Recipient ({value.to === "arc" ? "Arc address" : "Stellar address"})
-          {destinationWallet.address && destinationWallet.address !== value.recipient && (
-            <button type="button" className="link-button" onClick={useConnectedAddress}>
-              Use connected address
-            </button>
-          )}
-        </span>
-        <input
-          type="text"
-          placeholder={value.to === "arc" ? "0x..." : "G..."}
-          value={value.recipient}
-          onChange={(e) => onChange({ ...value, recipient: e.target.value })}
-        />
-        {recipientErr && <span className="field-error">{recipientErr}</span>}
-      </label>
-
-      <label>
         Speed
         <select
           value={value.speed}
@@ -119,21 +105,44 @@ export function TransferForm({ value, onChange, arcWallet, stellarWallet, onSubm
         </select>
       </label>
 
-      <label className="checkbox-row">
-        <input
-          type="checkbox"
-          checked={value.useDestinationSigner}
-          onChange={(e) => onChange({ ...value, useDestinationSigner: e.target.checked })}
-        />
-        Complete the mint automatically (requires both wallets connected)
+      <label className="toggle-row">
+        <span className="toggle-switch">
+          <input
+            type="checkbox"
+            checked={value.useDestinationSigner}
+            onChange={(e) => onChange({ ...value, useDestinationSigner: e.target.checked })}
+          />
+          <span className="toggle-track" aria-hidden="true" />
+        </span>
+        Complete the mint automatically
+        <span className="info-tooltip">
+          <button type="button" className="info-icon" aria-label="More info">
+            i
+          </button>
+          <span className="info-bubble" role="tooltip">
+            {TOGGLE_INFO}
+          </span>
+        </span>
       </label>
 
       {!value.useDestinationSigner && (
-        <p className="hint">
-          Leaving this unchecked demonstrates the two-step pattern: the transfer will return{" "}
-          <code>status: "pending"</code>, and you finish it later with a "Complete mint" button
-          once the destination wallet is connected.
-        </p>
+        <label>
+          <span className="label-row">
+            Recipient ({value.to === "arc" ? "Arc address" : "Stellar address"})
+            {destinationWallet.address && destinationWallet.address !== value.recipient && (
+              <button type="button" className="link-button" onClick={useConnectedAddress}>
+                Use connected address
+              </button>
+            )}
+          </span>
+          <input
+            type="text"
+            placeholder={value.to === "arc" ? "0x..." : "G..."}
+            value={value.recipient}
+            onChange={(e) => onChange({ ...value, recipient: e.target.value })}
+          />
+          {recipientErr && <span className="field-error">{recipientErr}</span>}
+        </label>
       )}
 
       <button type="submit" disabled={!canSubmit}>
