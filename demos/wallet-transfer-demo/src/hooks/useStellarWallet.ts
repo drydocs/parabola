@@ -32,11 +32,25 @@ export function useStellarWallet() {
 
   useEffect(() => {
     if (status !== "connected" || !address) return;
+    let cancelled = false;
 
+    // Window focus fires the instant Freighter's own sign/approve popup closes, which is
+    // indistinguishable at the DOM-event level from the user having disconnected the
+    // wallet while the tab was in the background. A single check right at that moment can
+    // catch Freighter mid-transition and read as "not connected" even though nothing is
+    // actually wrong (confirmed this by watching a real sign flow trip it). Requiring a
+    // second check, a beat later, to agree before disconnecting filters that out without
+    // giving up on detecting a real external disconnect.
     function recheck(): void {
       if (!address) return;
-      void stellarWalletStillConnected(address).then((stillConnected) => {
-        if (!stillConnected) disconnect();
+      void stellarWalletStillConnected(address).then((firstCheck) => {
+        if (firstCheck || cancelled) return;
+        setTimeout(() => {
+          if (cancelled) return;
+          void stellarWalletStillConnected(address).then((secondCheck) => {
+            if (!secondCheck && !cancelled) disconnect();
+          });
+        }, 1500);
       });
     }
 
@@ -48,6 +62,7 @@ export function useStellarWallet() {
     window.addEventListener("focus", recheck);
 
     return () => {
+      cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("focus", recheck);
     };

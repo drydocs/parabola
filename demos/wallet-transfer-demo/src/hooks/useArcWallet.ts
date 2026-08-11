@@ -33,14 +33,21 @@ export function useArcWallet() {
   }, []);
 
   // MetaMask (and other EIP-1193 wallets) disconnecting or switching accounts from
-  // within the wallet's own UI doesn't call anything in this app -- without this
+  // within the wallet's own UI doesn't call anything in this app. Without this
   // listener the app keeps showing "connected" to a wallet that no longer agrees.
   // accountsChanged fires with an empty array on disconnect, or a new account on switch;
   // either way the viem WalletClient built in connectArcWallet() is bound to the old
   // account, so the only correct response is to drop it and require reconnecting.
+  //
+  // The EIP-1193 "disconnect" event is not a reliable signal on its own: it has been
+  // observed firing around a transaction's own confirmation lifecycle, not just a real
+  // wallet disconnect. Confirmed via eth_accounts (a passive check, no popup) before
+  // actually dropping the session, the same defensive pattern used for Freighter, which
+  // hit the identical false-positive class of bug.
   useEffect(() => {
     const ethereum = window.ethereum;
     if (!ethereum?.on) return;
+    let cancelled = false;
 
     function handleAccountsChanged(...args: unknown[]): void {
       const accounts = args[0] as string[];
@@ -49,12 +56,25 @@ export function useArcWallet() {
       }
     }
 
+    function verifyAndDisconnect(): void {
+      void ethereum!
+        .request({ method: "eth_accounts" })
+        .then((result) => {
+          const accounts = result as string[];
+          if (!cancelled && accounts.length === 0) disconnect();
+        })
+        .catch(() => {
+          // If we can't even ask, don't assume disconnected on that basis alone.
+        });
+    }
+
     ethereum.on("accountsChanged", handleAccountsChanged);
-    ethereum.on("disconnect", disconnect);
+    ethereum.on("disconnect", verifyAndDisconnect);
 
     return () => {
+      cancelled = true;
       ethereum.removeListener?.("accountsChanged", handleAccountsChanged);
-      ethereum.removeListener?.("disconnect", disconnect);
+      ethereum.removeListener?.("disconnect", verifyAndDisconnect);
     };
   }, [address, disconnect]);
 
