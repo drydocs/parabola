@@ -17,7 +17,7 @@ export async function fetchFastTransferFeeBps(
     throw new Error(`Iris fees request failed: ${res.status} ${res.statusText}`);
   }
   const body = (await res.json()) as IrisFeesResponse;
-  const fastEntry = body.data.find((entry) => entry.finalityThreshold <= 1000);
+  const fastEntry = body.find((entry) => entry.finalityThreshold <= 1000);
   return fastEntry?.minimumFee ?? 0;
 }
 
