@@ -1,6 +1,7 @@
 import { createPublicClient, http, defineChain, type Hex } from "viem";
 import { ARC_TESTNET } from "../constants.js";
 import type { ArcSigner } from "../types.js";
+import { SubmissionTimeoutError } from "../errors.js";
 
 export const arcTestnetChain = defineChain({
   id: ARC_TESTNET.chainId,
@@ -94,7 +95,15 @@ async function writeAndWait(signer: ArcSigner, request: WriteContractRequest) {
     account,
     chain: arcTestnetChain,
   } as Parameters<ArcSigner["walletClient"]["writeContract"]>[0]);
-  await publicClient().waitForTransactionReceipt({ hash });
+  try {
+    await publicClient().waitForTransactionReceipt({ hash });
+  } catch (err) {
+    // The transaction was already broadcast (hash exists); a failure here means we
+    // couldn't confirm it in time, not that it didn't happen. Surface the hash instead
+    // of discarding it in a bare error.
+    const message = err instanceof Error ? err.message : String(err);
+    throw new SubmissionTimeoutError(message, hash);
+  }
   return hash;
 }
 

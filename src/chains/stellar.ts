@@ -4,10 +4,12 @@ import {
   BASE_FEE,
   Address,
   nativeToScVal,
+  scValToNative,
   rpc,
 } from "@stellar/stellar-sdk";
-import { STELLAR_TESTNET } from "../constants.js";
+import { STELLAR_TESTNET, STELLAR_TX_TIMEOUT_SECONDS, STELLAR_CONFIRMATION_TIMEOUT_MS } from "../constants.js";
 import type { StellarSigner } from "../types.js";
+import { SubmissionTimeoutError } from "../errors.js";
 
 function getServer(): rpc.Server {
   return new rpc.Server(STELLAR_TESTNET.sorobanRpcUrl);
@@ -47,7 +49,7 @@ async function invokeContract(
     networkPassphrase: STELLAR_TESTNET.networkPassphrase,
   })
     .addOperation(contract.call(method, ...args))
-    .setTimeout(60)
+    .setTimeout(STELLAR_TX_TIMEOUT_SECONDS)
     .build();
 
   const prepared = await server.prepareTransaction(builtTx);
@@ -63,7 +65,7 @@ async function invokeContract(
 }
 
 async function pollTransactionStatus(server: rpc.Server, hash: string): Promise<string> {
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + STELLAR_CONFIRMATION_TIMEOUT_MS;
   while (Date.now() < deadline) {
     const result = await server.getTransaction(hash);
     if (result.status === "SUCCESS") return hash;
@@ -72,7 +74,11 @@ async function pollTransactionStatus(server: rpc.Server, hash: string): Promise<
     }
     await new Promise((resolve) => setTimeout(resolve, 2000));
   }
-  throw new Error(`Timed out waiting for Stellar transaction ${hash} to confirm`);
+  // The transaction was genuinely broadcast (this hash came from a successful
+  // sendTransaction); confirmation just didn't come back in time. That's different
+  // from never having been submitted, so callers get a hash they can act on instead
+  // of a bare error that discards it.
+  throw new SubmissionTimeoutError(`Timed out waiting for Stellar transaction ${hash} to confirm`, hash);
 }
 
 /**
@@ -96,7 +102,56 @@ export async function approveUsdcOnStellar(
     nativeToScVal(expirationLedger, { type: "u32" }),
   ];
 
-  return invokeContract(STELLAR_TESTNET.usdc, "approve", args, signer);
+  const approveTxHash = await invokeContract(STELLAR_TESTNET.usdc, "approve", args, signer);
+
+  // The approve tx above is confirmed (SUCCESS) by this point, but a subsequent
+  // deposit_for_burn call's simulation has still been observed reading a stale
+  // allowance of 0 immediately afterward. That's RPC read-after-write lag between the
+  // ledger closing and it being queryable for simulation, not a logic bug in either
+  // call. Actively poll the real on-chain allowance until it reflects the approval
+  // (or give up with a clear error) rather than handing back control while the two
+  // calls' views of state can still disagree.
+  await waitForAllowance(signer.publicKey, STELLAR_TESTNET.tokenMessengerMinter, amountRaw);
+
+  return approveTxHash;
+}
+
+async function getUsdcAllowance(owner: string, spender: string): Promise<bigint> {
+  const server = getServer();
+  const account = await server.getAccount(owner);
+  const contract = new Contract(STELLAR_TESTNET.usdc);
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: STELLAR_TESTNET.networkPassphrase,
+  })
+    .addOperation(
+      contract.call("allowance", Address.fromString(owner).toScVal(), Address.fromString(spender).toScVal()),
+    )
+    .setTimeout(30)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) {
+    throw new Error(`Failed to read Stellar USDC allowance: ${sim.error}`);
+  }
+  if (!rpc.Api.isSimulationSuccess(sim) || !sim.result) {
+    return 0n;
+  }
+  return BigInt(scValToNative(sim.result.retval));
+}
+
+async function waitForAllowance(owner: string, spender: string, minimum: bigint): Promise<void> {
+  const attempts = 6;
+  const delayMs = 1500;
+  for (let i = 0; i < attempts; i++) {
+    const allowance = await getUsdcAllowance(owner, spender);
+    if (allowance >= minimum) return;
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+  throw new Error(
+    `Approved USDC allowance for ${spender} did not reach ${minimum} after ${(attempts * delayMs) / 1000}s of polling; the approval transaction confirmed but the network hasn't reflected it yet`,
+  );
 }
 
 /**
@@ -129,7 +184,39 @@ export async function burnUsdcOnStellar(params: {
     nativeToScVal(params.minFinalityThreshold, { type: "u32" }),
   ];
 
-  return invokeContract(STELLAR_TESTNET.tokenMessengerMinter, "deposit_for_burn", args, params.signer);
+  // waitForAllowance() in approveUsdcOnStellar already confirmed the real on-chain
+  // state is caught up before this ever runs, but that confirmation and this call's own
+  // getAccount()/simulation can still land on different RPC nodes that haven't converged
+  // with each other yet. Observed two distinct symptoms of the same underlying lag: a
+  // stale allowance read ("not enough allowance"), and a stale account sequence number
+  // (txBadSeq) if the node serving this call's getAccount() hasn't seen the approve's
+  // sequence bump yet. Both retry the same way: invokeContract() re-fetches the account
+  // fresh on every call, so trying again gives it a chance to hit a caught-up node.
+  return retryOnTransientRpcLag(() =>
+    invokeContract(STELLAR_TESTNET.tokenMessengerMinter, "deposit_for_burn", args, params.signer),
+  );
+}
+
+function isTransientRpcLagError(message: string): boolean {
+  return message.includes("not enough allowance") || message.includes("txBadSeq");
+}
+
+async function retryOnTransientRpcLag(call: () => Promise<string>): Promise<string> {
+  const attempts = 3;
+  const delayMs = 2000;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await call();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isLastAttempt = i === attempts - 1;
+      if (!isTransientRpcLagError(message) || isLastAttempt) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error("unreachable");
 }
 
 /**

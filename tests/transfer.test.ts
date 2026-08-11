@@ -29,7 +29,7 @@ vi.mock("../src/iris/poll.js", () => ({
 }));
 
 const { transfer, completeMint } = await import("../src/transfer.js");
-const { TransferError } = await import("../src/errors.js");
+const { TransferError, SubmissionTimeoutError } = await import("../src/errors.js");
 
 const arcSigner = { walletClient: {} } as any;
 const stellarSigner = { publicKey: "GABCD" } as any;
@@ -85,6 +85,27 @@ describe("transfer (Arc -> Stellar)", () => {
     expect(result.status).toBe("pending");
     expect(result.mintTxHash).toBe("");
     expect(mintAndForwardOnStellar).not.toHaveBeenCalled();
+  });
+
+  it("converts a burn-step SubmissionTimeoutError into a recoverable TransferError", async () => {
+    burnUsdcOnArcWithStellarForward.mockRejectedValueOnce(
+      new SubmissionTimeoutError("Timed out waiting for receipt", "0xburnhookhash"),
+    );
+
+    await expect(
+      transfer({
+        from: "arc",
+        to: "stellar",
+        amount: "10",
+        recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+        speed: "standard",
+        signer: arcSigner,
+        options: { destinationSigner: stellarSigner },
+      }),
+    ).rejects.toMatchObject({
+      burnTxHash: "0xburnhookhash",
+    });
+    expect(pollForAttestation).not.toHaveBeenCalled();
   });
 
   it("rethrows a TransferError carrying burnTxHash when the mint step fails", async () => {

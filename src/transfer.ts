@@ -19,7 +19,7 @@ import {
   DEFAULT_POLL_TIMEOUT_MS,
 } from "./constants.js";
 import { fetchFastTransferFeeBps, pollForAttestation } from "./iris/poll.js";
-import { TransferError } from "./errors.js";
+import { TransferError, SubmissionTimeoutError } from "./errors.js";
 import { toRawAmount, fromRawAmount, decimalsForChain } from "./utils/amount.js";
 import { parseUsdcAmount, stellarAddressToBytes32, evmAddressToBytes32, encodeStellarForwardHook } from "./utils/encoding.js";
 import { approveUsdcOnArc, burnUsdcOnArc, burnUsdcOnArcWithStellarForward, receiveMessageOnArc } from "./chains/arc.js";
@@ -131,27 +131,29 @@ async function burn(args: {
     // succeed. Approving the exact amount per call avoids leaving a standing
     // allowance beyond what this transfer needs.
     await approveUsdcOnArc(signer, amountRaw);
-    if (params.to === "stellar") {
-      const hookData = encodeStellarForwardHook(params.recipient);
-      const mintRecipientBytes32 = stellarAddressToBytes32(STELLAR_TESTNET.cctpForwarder);
-      return burnUsdcOnArcWithStellarForward({
+    return runBurn(() => {
+      if (params.to === "stellar") {
+        const hookData = encodeStellarForwardHook(params.recipient);
+        const mintRecipientBytes32 = stellarAddressToBytes32(STELLAR_TESTNET.cctpForwarder);
+        return burnUsdcOnArcWithStellarForward({
+          amountRaw,
+          destinationDomain: STELLAR_DOMAIN,
+          mintRecipientBytes32,
+          maxFeeRaw,
+          minFinalityThreshold,
+          hookData,
+          signer,
+        });
+      }
+      const mintRecipientBytes32 = evmAddressToBytes32(params.recipient as `0x${string}`);
+      return burnUsdcOnArc({
         amountRaw,
-        destinationDomain: STELLAR_DOMAIN,
+        destinationDomain: domainFor(params.to),
         mintRecipientBytes32,
         maxFeeRaw,
         minFinalityThreshold,
-        hookData,
         signer,
       });
-    }
-    const mintRecipientBytes32 = evmAddressToBytes32(params.recipient as `0x${string}`);
-    return burnUsdcOnArc({
-      amountRaw,
-      destinationDomain: domainFor(params.to),
-      mintRecipientBytes32,
-      maxFeeRaw,
-      minFinalityThreshold,
-      signer,
     });
   }
 
@@ -160,14 +162,34 @@ async function burn(args: {
   // Stellar's SEP-41 USDC token requires the same approve-before-transfer_from
   // pattern as ERC20 on Arc.
   await approveUsdcOnStellar(amountRaw, signer);
-  return burnUsdcOnStellar({
-    amountRaw,
-    destinationDomain: ARC_DOMAIN,
-    mintRecipientBytes32,
-    maxFeeRaw,
-    minFinalityThreshold,
-    signer,
-  });
+  return runBurn(() =>
+    burnUsdcOnStellar({
+      amountRaw,
+      destinationDomain: ARC_DOMAIN,
+      mintRecipientBytes32,
+      maxFeeRaw,
+      minFinalityThreshold,
+      signer,
+    }),
+  );
+}
+
+/**
+ * Runs the actual burn call (as opposed to the approve step before it). If confirmation
+ * times out here, funds may genuinely have left the source chain. Unlike an approve
+ * timeout, this is the one point in burn() where losing the hash would mean losing the
+ * only way to recover via completeMint(), so it's converted to a TransferError instead
+ * of propagating as a bare SubmissionTimeoutError.
+ */
+async function runBurn(call: () => Promise<string>): Promise<string> {
+  try {
+    return await call();
+  } catch (err) {
+    if (err instanceof SubmissionTimeoutError) {
+      throw new TransferError(err.message, err.hash);
+    }
+    throw err;
+  }
 }
 
 async function mint(args: {

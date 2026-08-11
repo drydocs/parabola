@@ -15,3 +15,21 @@ export class TransferError extends Error {
     this.attestationHash = attestationHash;
   }
 }
+
+/**
+ * Thrown when a transaction was broadcast (a hash exists) but the SDK gave up waiting
+ * for on-chain confirmation before it could tell whether it landed. This is genuine
+ * uncertainty, not "nothing happened": the transaction may still succeed or fail on
+ * its own. Chain-specific submit helpers (writeAndWait on Arc, pollTransactionStatus on
+ * Stellar) throw this instead of a bare Error so callers with a hash can act on it,
+ * rather than the hash being silently discarded along with the thrown error.
+ */
+export class SubmissionTimeoutError extends Error {
+  readonly hash: string;
+
+  constructor(message: string, hash: string) {
+    super(message);
+    this.name = "SubmissionTimeoutError";
+    this.hash = hash;
+  }
+}

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { Account, Contract, Keypair, StrKey, rpc } from "@stellar/stellar-sdk";
-import { burnUsdcOnStellar, mintAndForwardOnStellar } from "../src/chains/stellar.js";
+import { Account, Contract, Keypair, StrKey, nativeToScVal, rpc } from "@stellar/stellar-sdk";
+import { burnUsdcOnStellar, mintAndForwardOnStellar, approveUsdcOnStellar } from "../src/chains/stellar.js";
 import { STELLAR_TESTNET } from "../src/constants.js";
 import { stellarAddressToBytes32 } from "../src/utils/encoding.js";
 
@@ -54,6 +54,112 @@ describe("burnUsdcOnStellar (TokenMessengerMinter.deposit_for_burn)", () => {
     expect(contractIdOf(callSpy.mock.instances[0] as unknown as Contract)).toBe(STELLAR_TESTNET.tokenMessengerMinter);
     expect(callSpy.mock.calls[0]?.[0]).toBe("deposit_for_burn");
   });
+
+  it("retries once on a transient 'not enough allowance' error and then succeeds", async () => {
+    const signerKeypair = mockHappyPathRpc();
+    vi.spyOn(rpc.Server.prototype, "prepareTransaction")
+      .mockRejectedValueOnce(
+        new Error('HostError: ... data:["not enough allowance to spend", 0, 10000000] ...'),
+      )
+      .mockImplementation(async (tx) => tx as any);
+
+    const recipient = Keypair.random().publicKey();
+    const hash = await burnUsdcOnStellar({
+      amountRaw: 10_000_000n,
+      destinationDomain: 26,
+      mintRecipientBytes32: stellarAddressToBytes32(recipient),
+      maxFeeRaw: 1000n,
+      minFinalityThreshold: 2000,
+      signer: { publicKey: signerKeypair.publicKey(), keypair: signerKeypair },
+    });
+
+    expect(hash).toBe(FAKE_HASH);
+  }, 10_000);
+
+  it("retries once on a transient txBadSeq error and then succeeds", async () => {
+    const signerKeypair = mockHappyPathRpc();
+    vi.spyOn(rpc.Server.prototype, "sendTransaction")
+      .mockResolvedValueOnce({
+        status: "ERROR",
+        errorResult: { _switch: { name: "txBadSeq", value: -5 } },
+      } as any)
+      .mockResolvedValue({ status: "PENDING", hash: FAKE_HASH } as any);
+
+    const recipient = Keypair.random().publicKey();
+    const hash = await burnUsdcOnStellar({
+      amountRaw: 10_000_000n,
+      destinationDomain: 26,
+      mintRecipientBytes32: stellarAddressToBytes32(recipient),
+      maxFeeRaw: 1000n,
+      minFinalityThreshold: 2000,
+      signer: { publicKey: signerKeypair.publicKey(), keypair: signerKeypair },
+    });
+
+    expect(hash).toBe(FAKE_HASH);
+  }, 10_000);
+
+  it("does not retry a non-allowance failure", async () => {
+    const signerKeypair = mockHappyPathRpc();
+    vi.spyOn(rpc.Server.prototype, "prepareTransaction").mockRejectedValue(
+      new Error("some unrelated simulation failure"),
+    );
+
+    const recipient = Keypair.random().publicKey();
+    await expect(
+      burnUsdcOnStellar({
+        amountRaw: 10_000_000n,
+        destinationDomain: 26,
+        mintRecipientBytes32: stellarAddressToBytes32(recipient),
+        maxFeeRaw: 1000n,
+        minFinalityThreshold: 2000,
+        signer: { publicKey: signerKeypair.publicKey(), keypair: signerKeypair },
+      }),
+    ).rejects.toThrow("some unrelated simulation failure");
+  });
+});
+
+describe("approveUsdcOnStellar", () => {
+  it("waits for the allowance to actually be readable before returning", async () => {
+    const signerKeypair = mockHappyPathRpc();
+    vi.spyOn(rpc.Server.prototype, "getLatestLedger").mockResolvedValue({ sequence: 100 } as any);
+
+    // Simulates the RPC read-after-write lag this polling exists to cover: the first
+    // simulateTransaction call still sees the pre-approval allowance (0), the second
+    // reflects the just-confirmed approve. approveUsdcOnStellar must not return until
+    // the real on-chain state agrees with the approve it just submitted.
+    const simulate = vi
+      .spyOn(rpc.Server.prototype, "simulateTransaction")
+      .mockResolvedValueOnce({
+        transactionData: {},
+        result: { retval: nativeToScVal(0n, { type: "i128" }) },
+      } as any)
+      .mockResolvedValueOnce({
+        transactionData: {},
+        result: { retval: nativeToScVal(10_000_000n, { type: "i128" }) },
+      } as any);
+
+    const hash = await approveUsdcOnStellar(10_000_000n, {
+      publicKey: signerKeypair.publicKey(),
+      keypair: signerKeypair,
+    });
+
+    expect(hash).toBe(FAKE_HASH);
+    expect(simulate).toHaveBeenCalledTimes(2);
+  });
+
+  it("throws a clear error if the allowance never reflects the approval", async () => {
+    mockHappyPathRpc();
+    vi.spyOn(rpc.Server.prototype, "getLatestLedger").mockResolvedValue({ sequence: 100 } as any);
+    vi.spyOn(rpc.Server.prototype, "simulateTransaction").mockResolvedValue({
+      transactionData: {},
+      result: { retval: nativeToScVal(0n, { type: "i128" }) },
+    } as any);
+
+    const signerKeypair = Keypair.random();
+    await expect(
+      approveUsdcOnStellar(10_000_000n, { publicKey: signerKeypair.publicKey(), keypair: signerKeypair }),
+    ).rejects.toThrow(/did not reach/);
+  }, 15_000);
 });
 
 describe("mintAndForwardOnStellar (CctpForwarder.mint_and_forward)", () => {

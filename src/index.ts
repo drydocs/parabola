@@ -2,7 +2,7 @@ export { transfer, completeMint } from "./transfer.js";
 export { estimateFee } from "./estimate.js";
 export { arcTestnetChain } from "./chains/arc.js";
 export { ARC_TESTNET, STELLAR_TESTNET } from "./constants.js";
-export { TransferError } from "./errors.js";
+export { TransferError, SubmissionTimeoutError } from "./errors.js";
 export type {
   ChainId,
   TransferSpeed,
