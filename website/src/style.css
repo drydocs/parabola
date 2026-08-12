@@ -214,6 +214,12 @@ nav.top-links a.cta:hover { opacity: 0.85; }
   gap: 26px;
   pointer-events: none;
   margin: 0 auto;
+  /* .hero-copy is itself a flex item inside .hero-visual (display: flex). Flex items
+     shrink-to-fit their content by default instead of filling the main axis, so without
+     this, .hero-copy silently sized itself to whatever width the unwrapped h1 wanted and
+     no amount of width/white-space fixing on h1 itself could force a wrap: the parent
+     was never actually constrained to the viewport in the first place. */
+  width: 100%;
 }
 
 .hero-copy > * { pointer-events: auto; }
@@ -543,10 +549,11 @@ footer .foot-brand {
      Capping h1 to the viewport directly is what actually forces the wrap to take effect. */
   h1 {
     max-width: 100%;
-    /* clamp()'s 2.8rem floor is tuned for desktop; Unbounded's ExtraBold weight is wide
-       enough that even short phrases like "The developer" overflow a phone viewport at
-       that size. Mobile needs its own, smaller floor. */
-    font-size: clamp(0.95rem, 5vw, 1.5rem);
+    /* clamp()'s 2.8rem floor is tuned for desktop and overflows a phone viewport at that
+       size, but the fix is wrapping (via white-space: normal above), not shrinking the
+       type down to near body-text size. Individual words like "developer" or "platform"
+       fit fine around this size; only whole unwrapped phrases were ever the problem. */
+    font-size: clamp(1.9rem, 11vw, 3rem);
   }
   .section-head { justify-content: flex-start; }
   .section-head.with-eyebrow { grid-template-columns: 1fr; gap: 16px; }
