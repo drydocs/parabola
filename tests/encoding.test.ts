@@ -4,6 +4,7 @@ import {
   stellarAddressToBytes32,
   bytes32ToStellarAddress,
   encodeStellarForwardHook,
+  evmAddressToBytes32,
   parseUsdcAmount,
   formatUsdcAmount,
   convertPrecision,
@@ -49,6 +50,40 @@ describe("encodeStellarForwardHook", () => {
     expect(bytes.readUInt32BE(24)).toBe(0); // version
     expect(bytes.readUInt32BE(28)).toBe(recipient.length);
     expect(bytes.subarray(32).toString("utf8")).toBe(recipient);
+  });
+
+  // A malformed recipient here has nowhere else to fail loudly: mint_and_forward
+  // would eventually reject it on-chain, but only after the source-chain burn has
+  // already spent real funds. This must throw before that burn is ever submitted.
+  it("throws on a malformed recipient instead of silently encoding garbage", () => {
+    expect(() => encodeStellarForwardHook("not-a-stellar-address")).toThrow(
+      /Invalid Stellar address/,
+    );
+    expect(() => encodeStellarForwardHook("GTRUNCATED")).toThrow(/Invalid Stellar address/);
+  });
+});
+
+describe("evmAddressToBytes32", () => {
+  it("pads a valid 20-byte EVM address to 32 bytes", () => {
+    const address = `0x${"1".repeat(39)}C`; // 40 hex chars, verified by construction
+    expect(evmAddressToBytes32(address)).toBe(`0x000000000000000000000000${address.slice(2)}`);
+  });
+
+  // Before this validation existed, viem's pad() would silently accept a truncated
+  // or non-hex string and produce a syntactically valid but wrong bytes32 -- the
+  // burn would then succeed toward an address nobody controls, funds unrecoverable.
+  it("throws on a truncated address instead of silently padding it into a wrong one", () => {
+    expect(() => evmAddressToBytes32("0x1234")).toThrow(/Invalid EVM address/);
+  });
+
+  it("throws on a non-hex string instead of silently encoding it", () => {
+    expect(() => evmAddressToBytes32("not-a-hex-address")).toThrow(/Invalid EVM address/);
+  });
+
+  it("throws on an address missing the 0x prefix", () => {
+    expect(() => evmAddressToBytes32("70997970C51812dc3A010C7d01b50e0d17dc79C")).toThrow(
+      /Invalid EVM address/,
+    );
   });
 });
 

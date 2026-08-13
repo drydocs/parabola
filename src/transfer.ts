@@ -145,7 +145,7 @@ async function burn(args: {
           signer,
         });
       }
-      const mintRecipientBytes32 = evmAddressToBytes32(params.recipient as `0x${string}`);
+      const mintRecipientBytes32 = evmAddressToBytes32(params.recipient);
       return burnUsdcOnArc({
         amountRaw,
         destinationDomain: domainFor(params.to),
@@ -158,7 +158,7 @@ async function burn(args: {
   }
 
   const signer = params.signer as StellarSigner;
-  const mintRecipientBytes32 = evmAddressToBytes32(params.recipient as `0x${string}`);
+  const mintRecipientBytes32 = evmAddressToBytes32(params.recipient);
   // Stellar's SEP-41 USDC token requires the same approve-before-transfer_from
   // pattern as ERC20 on Arc.
   await approveUsdcOnStellar(amountRaw, signer);

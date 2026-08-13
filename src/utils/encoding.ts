@@ -40,6 +40,12 @@ export function bytes32ToStellarAddress(bytes32: `0x${string}`): string {
  * against Circle's reference implementation; re-verify there before changing.
  */
 export function encodeStellarForwardHook(recipientStrkey: string): `0x${string}` {
+  if (!StrKey.isValidEd25519PublicKey(recipientStrkey) && !StrKey.isValidContract(recipientStrkey)) {
+    // A malformed recipient here isn't caught anywhere else: mint_and_forward would
+    // fail on-chain eventually, but only after the source-chain burn has already
+    // spent real funds. Reject it before that burn is ever submitted.
+    throw new Error(`Invalid Stellar address: ${recipientStrkey}`);
+  }
   const recipientBytes = Buffer.from(recipientStrkey, "utf8");
   const hookData = Buffer.alloc(32 + recipientBytes.length);
   hookData.writeUInt32BE(0, 24); // hook version = 0
@@ -78,9 +84,20 @@ export function formatUsdcAmount(raw: bigint, decimals: number): string {
   return negative ? `-${formatted}` : formatted;
 }
 
+const EVM_ADDRESS_PATTERN = /^0x[a-fA-F0-9]{40}$/;
+
 /** Pads a 20-byte EVM address (Arc) out to the 32-byte recipient format CCTP messages use. */
-export function evmAddressToBytes32(address: `0x${string}`): `0x${string}` {
-  return pad(address, { size: 32 });
+export function evmAddressToBytes32(address: string): `0x${string}` {
+  // address is typed `0x${string}` at every call site, but that's a compile-time
+  // assertion only; a caller passing a truncated or malformed string at runtime hits
+  // no check downstream, since viem's pad() just pads bytes, it doesn't validate hex.
+  // A garbage recipient here would silently become a syntactically valid but wrong
+  // bytes32, and the source-chain burn would succeed toward it, funds gone. Reject
+  // it before that burn is ever submitted.
+  if (!EVM_ADDRESS_PATTERN.test(address)) {
+    throw new Error(`Invalid EVM address: ${address}`);
+  }
+  return pad(address as `0x${string}`, { size: 32 });
 }
 
 /**
