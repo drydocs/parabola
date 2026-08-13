@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `TransferError`, carrying `burnTxHash` (and `attestationHash` when available), for any failure that happens after the source-chain burn has already succeeded.
 - `SubmissionTimeoutError`, carrying a transaction hash, for a broadcast transaction whose confirmation timed out before its outcome was known. Both are exported from the package root.
 - `tests/amount.test.ts`, covering the Arc/Stellar decimal-precision wiring in `src/utils/amount.ts` directly; previously only the lower-level parsing primitives it wraps were tested.
+- `checkStellarRecipientReady()`, exported from the package root, to check whether a Stellar address exists on-ledger and holds a USDC trustline before a transfer is attempted. `transfer()` now calls it automatically before any Arc-side approval or burn on an Arc-to-Stellar transfer, throwing a clear pre-burn error instead of letting the burn go through and only failing later at `mint_and_forward` with the USDC stuck at the CctpForwarder.
 
 ### Fixed
 

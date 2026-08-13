@@ -7,6 +7,7 @@ const receiveMessageOnArc = vi.fn();
 const approveUsdcOnStellar = vi.fn();
 const burnUsdcOnStellar = vi.fn();
 const mintAndForwardOnStellar = vi.fn();
+const checkStellarRecipientReady = vi.fn();
 const fetchFastTransferFeeBps = vi.fn();
 const pollForAttestation = vi.fn();
 
@@ -21,6 +22,7 @@ vi.mock("../src/chains/stellar.js", () => ({
   approveUsdcOnStellar: (...args: unknown[]) => approveUsdcOnStellar(...args),
   burnUsdcOnStellar: (...args: unknown[]) => burnUsdcOnStellar(...args),
   mintAndForwardOnStellar: (...args: unknown[]) => mintAndForwardOnStellar(...args),
+  checkStellarRecipientReady: (...args: unknown[]) => checkStellarRecipientReady(...args),
 }));
 
 vi.mock("../src/iris/poll.js", () => ({
@@ -41,6 +43,7 @@ beforeEach(() => {
   burnUsdcOnArcWithStellarForward.mockResolvedValue("0xburnhookhash");
   approveUsdcOnStellar.mockResolvedValue("stellarapprovehash");
   burnUsdcOnStellar.mockResolvedValue("stellarburnhash");
+  checkStellarRecipientReady.mockResolvedValue({ exists: true, hasTrustline: true, ready: true });
   pollForAttestation.mockResolvedValue({
     message: "0xmessage",
     attestation: "0xattestation",
@@ -149,6 +152,60 @@ describe("transfer (Arc -> Stellar)", () => {
     expect(caught).toBeInstanceOf(TransferError);
     expect((caught as InstanceType<typeof TransferError>).burnTxHash).toBe("0xburnhookhash");
     expect((caught as InstanceType<typeof TransferError>).attestationHash).toBeUndefined();
+  });
+
+  it("checks Stellar recipient readiness before approving or burning anything on Arc", async () => {
+    await transfer({
+      from: "arc",
+      to: "stellar",
+      amount: "10",
+      recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+      speed: "standard",
+      signer: arcSigner,
+      options: { destinationSigner: stellarSigner },
+    });
+
+    expect(checkStellarRecipientReady).toHaveBeenCalledWith(
+      "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+    );
+  });
+
+  it("refuses to burn toward a Stellar recipient that doesn't exist yet", async () => {
+    checkStellarRecipientReady.mockResolvedValue({ exists: false, hasTrustline: false, ready: false });
+
+    await expect(
+      transfer({
+        from: "arc",
+        to: "stellar",
+        amount: "10",
+        recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+        speed: "standard",
+        signer: arcSigner,
+        options: { destinationSigner: stellarSigner },
+      }),
+    ).rejects.toThrow(/does not exist yet/);
+
+    expect(approveUsdcOnArc).not.toHaveBeenCalled();
+    expect(burnUsdcOnArcWithStellarForward).not.toHaveBeenCalled();
+  });
+
+  it("refuses to burn toward a Stellar recipient with no USDC trustline", async () => {
+    checkStellarRecipientReady.mockResolvedValue({ exists: true, hasTrustline: false, ready: false });
+
+    await expect(
+      transfer({
+        from: "arc",
+        to: "stellar",
+        amount: "10",
+        recipient: "GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI",
+        speed: "standard",
+        signer: arcSigner,
+        options: { destinationSigner: stellarSigner },
+      }),
+    ).rejects.toThrow(/no USDC trustline/);
+
+    expect(approveUsdcOnArc).not.toHaveBeenCalled();
+    expect(burnUsdcOnArcWithStellarForward).not.toHaveBeenCalled();
   });
 
   it("can be finished later via completeMint using the returned burnTxHash", async () => {

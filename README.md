@@ -153,6 +153,20 @@ const { mintTxHash, attestationHash } = await completeMint({
 });
 ```
 
+## Checking a Stellar recipient before you transfer
+
+A Stellar account doesn't exist on-ledger until it's funded with the minimum XLM reserve, and it can't hold USDC until it also has a USDC trustline. When the destination of a transfer is Stellar, `transfer()` checks both automatically before submitting anything on the source chain, and throws a clear error up front if the recipient isn't ready instead of letting the burn go through and only failing later at the mint step, with the USDC then stuck at the `CctpForwarder` contract.
+
+You can also run this check yourself ahead of time, for example to validate a recipient address in a form before a user submits a transfer:
+
+```typescript
+import { checkStellarRecipientReady } from "@drydocs/parabola";
+
+const status = await checkStellarRecipientReady("GBZXN7PIRZGNMHGA7MUUUF4GWPY5AYPV6LY4UV2GL6VJGIQRXFDNMADI");
+console.log(status);
+// { exists: true, hasTrustline: true, ready: true }
+```
+
 ## Environment variables
 
 Parabola's contract addresses, RPC URLs, and Iris endpoints are baked in (testnet only, see Known Limitations). The examples read these from your environment:

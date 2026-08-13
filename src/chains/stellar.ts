@@ -116,6 +116,55 @@ export async function approveUsdcOnStellar(
   return approveTxHash;
 }
 
+export interface StellarRecipientStatus {
+  /** Whether the account exists on-ledger (has been funded with at least the minimum XLM reserve). */
+  exists: boolean;
+  /** Whether the account holds a trustline for the USDC asset. Only meaningful when `exists` is true. */
+  hasTrustline: boolean;
+  /** True only when both `exists` and `hasTrustline` are true; a mint sent here would actually land. */
+  ready: boolean;
+}
+
+const MISSING_TRUSTLINE_MESSAGE = "trustline entry is missing for account";
+
+/**
+ * Checks whether a Stellar account can actually receive USDC: it must exist on-ledger
+ * (accounts don't exist until minimally funded with XLM) and hold a trustline for the
+ * USDC asset. Verified directly against live testnet: an unfunded account makes
+ * server.getAccount() throw "Account not found", and a funded account with no USDC
+ * trustline makes the balance() simulation fail with Error(Contract, #13) /
+ * "trustline entry is missing for account", rather than succeeding with a balance of 0.
+ */
+export async function checkStellarRecipientReady(recipient: string): Promise<StellarRecipientStatus> {
+  const server = getServer();
+
+  let account;
+  try {
+    account = await server.getAccount(recipient);
+  } catch {
+    return { exists: false, hasTrustline: false, ready: false };
+  }
+
+  const contract = new Contract(STELLAR_TESTNET.usdc);
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: STELLAR_TESTNET.networkPassphrase,
+  })
+    .addOperation(contract.call("balance", Address.fromString(recipient).toScVal()))
+    .setTimeout(30)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (rpc.Api.isSimulationError(sim)) {
+    if (sim.error.includes(MISSING_TRUSTLINE_MESSAGE)) {
+      return { exists: true, hasTrustline: false, ready: false };
+    }
+    throw new Error(`Failed to check Stellar recipient's USDC trustline: ${sim.error}`);
+  }
+
+  return { exists: true, hasTrustline: true, ready: true };
+}
+
 async function getUsdcAllowance(owner: string, spender: string): Promise<bigint> {
   const server = getServer();
   const account = await server.getAccount(owner);

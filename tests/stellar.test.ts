@@ -1,6 +1,11 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { Account, Contract, Keypair, StrKey, nativeToScVal, rpc } from "@stellar/stellar-sdk";
-import { burnUsdcOnStellar, mintAndForwardOnStellar, approveUsdcOnStellar } from "../src/chains/stellar.js";
+import {
+  burnUsdcOnStellar,
+  mintAndForwardOnStellar,
+  approveUsdcOnStellar,
+  checkStellarRecipientReady,
+} from "../src/chains/stellar.js";
 import { STELLAR_TESTNET } from "../src/constants.js";
 import { stellarAddressToBytes32 } from "../src/utils/encoding.js";
 
@@ -160,6 +165,58 @@ describe("approveUsdcOnStellar", () => {
       approveUsdcOnStellar(10_000_000n, { publicKey: signerKeypair.publicKey(), keypair: signerKeypair }),
     ).rejects.toThrow(/did not reach/);
   }, 15_000);
+});
+
+describe("checkStellarRecipientReady", () => {
+  it("reports not-existing when the account has never been funded", async () => {
+    vi.spyOn(rpc.Server.prototype, "getAccount").mockRejectedValue(
+      new Error("Account not found: G..."),
+    );
+
+    const status = await checkStellarRecipientReady(Keypair.random().publicKey());
+
+    expect(status).toEqual({ exists: false, hasTrustline: false, ready: false });
+  });
+
+  it("reports missing-trustline when the account exists but has never held USDC", async () => {
+    const recipient = Keypair.random().publicKey();
+    vi.spyOn(rpc.Server.prototype, "getAccount").mockResolvedValue(new Account(recipient, "1"));
+    vi.spyOn(rpc.Server.prototype, "simulateTransaction").mockResolvedValue({
+      error:
+        'HostError: Error(Contract, #13)\n\nEvent log (newest first):\n   0: [Diagnostic Event] ... data:["trustline entry is missing for account", "' +
+        recipient +
+        '"]',
+    } as any);
+
+    const status = await checkStellarRecipientReady(recipient);
+
+    expect(status).toEqual({ exists: true, hasTrustline: false, ready: false });
+  });
+
+  it("reports ready when the account exists and holds the USDC trustline", async () => {
+    const recipient = Keypair.random().publicKey();
+    vi.spyOn(rpc.Server.prototype, "getAccount").mockResolvedValue(new Account(recipient, "1"));
+    vi.spyOn(rpc.Server.prototype, "simulateTransaction").mockResolvedValue({
+      transactionData: {},
+      result: { retval: nativeToScVal(0n, { type: "i128" }) },
+    } as any);
+
+    const status = await checkStellarRecipientReady(recipient);
+
+    expect(status).toEqual({ exists: true, hasTrustline: true, ready: true });
+  });
+
+  it("rethrows an unrelated simulation error instead of misreporting it as a missing trustline", async () => {
+    const recipient = Keypair.random().publicKey();
+    vi.spyOn(rpc.Server.prototype, "getAccount").mockResolvedValue(new Account(recipient, "1"));
+    vi.spyOn(rpc.Server.prototype, "simulateTransaction").mockResolvedValue({
+      error: "HostError: some unrelated simulation failure",
+    } as any);
+
+    await expect(checkStellarRecipientReady(recipient)).rejects.toThrow(
+      /Failed to check Stellar recipient's USDC trustline/,
+    );
+  });
 });
 
 describe("mintAndForwardOnStellar (CctpForwarder.mint_and_forward)", () => {

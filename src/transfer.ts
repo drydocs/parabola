@@ -23,7 +23,12 @@ import { TransferError, SubmissionTimeoutError } from "./errors.js";
 import { toRawAmount, fromRawAmount, decimalsForChain } from "./utils/amount.js";
 import { parseUsdcAmount, stellarAddressToBytes32, evmAddressToBytes32, encodeStellarForwardHook } from "./utils/encoding.js";
 import { approveUsdcOnArc, burnUsdcOnArc, burnUsdcOnArcWithStellarForward, receiveMessageOnArc } from "./chains/arc.js";
-import { approveUsdcOnStellar, burnUsdcOnStellar, mintAndForwardOnStellar } from "./chains/stellar.js";
+import {
+  approveUsdcOnStellar,
+  burnUsdcOnStellar,
+  mintAndForwardOnStellar,
+  checkStellarRecipientReady,
+} from "./chains/stellar.js";
 
 const FAST_ESTIMATED_DURATION_SECONDS = 15;
 
@@ -126,6 +131,11 @@ async function burn(args: {
 
   if (params.from === "arc") {
     const signer = params.signer as ArcSigner;
+
+    if (params.to === "stellar") {
+      await assertStellarRecipientReady(params.recipient);
+    }
+
     // TokenMessengerV2 pulls USDC via transferFrom under the hood; it must be
     // approved to spend at least amountRaw before depositForBurn(WithHook) will
     // succeed. Approving the exact amount per call avoids leaving a standing
@@ -172,6 +182,26 @@ async function burn(args: {
       signer,
     }),
   );
+}
+
+/**
+ * Verifies a Stellar recipient can actually receive USDC before anything is burned on
+ * Arc toward it. Without this, an unfunded or trustline-less recipient only surfaces as
+ * a failed mint_and_forward call after the burn has already gone through, leaving USDC
+ * stuck at the CctpForwarder with no way back to the sender.
+ */
+async function assertStellarRecipientReady(recipient: string): Promise<void> {
+  const status = await checkStellarRecipientReady(recipient);
+  if (!status.exists) {
+    throw new Error(
+      `Stellar recipient ${recipient} does not exist yet. It must be funded with at least the minimum XLM reserve before it can receive USDC.`,
+    );
+  }
+  if (!status.hasTrustline) {
+    throw new Error(
+      `Stellar recipient ${recipient} exists but has no USDC trustline. It must add a trustline for the USDC asset before it can receive USDC.`,
+    );
+  }
 }
 
 /**
