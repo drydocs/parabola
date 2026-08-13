@@ -17,7 +17,12 @@ jobs:
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # npm's OIDC trusted publishing requires npm CLI >=11.5.1, which needs
+          # Node >=22.14.0 to ship it. pnpm doesn't support OIDC publishing yet
+          # (github.com/pnpm/pnpm/issues/9812, and it actively 404s on pnpm 11 per
+          # github.com/pnpm/pnpm/issues/11513), so the publish step below uses npm
+          # directly rather than pnpm, even though everything before it uses pnpm.
+          node-version: 22
           cache: pnpm
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
@@ -32,6 +37,5 @@ jobs:
             echo "Tag $GITHUB_REF_NAME does not match package.json version $PKG_VERSION"
             exit 1
           fi
-      - run: pnpm publish --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - run: npm install -g npm@latest
+      - run: npm publish --access public
